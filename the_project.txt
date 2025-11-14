@@ -1,0 +1,17 @@
+The project is to set up an agent enabled development host and workflow.
+The project currently lives on a stand alone headless rpi5 running PI OS Lite, but could theoretically be containerised and ran anywhere.
+The project should consist of a front end and a back end.
+The dev servers, front and back, need to be acccessible over the network.
+The front end should be based on Vue3 and Vuetify.
+The backend can use whatever makes sense, Python or Node.
+
+The system should be able to work on itself.
+The user should be able to input prompts via a text area in the front end.
+The back end should queue that prompt for running.
+The back end should then use codex to run the prompt on the project code and log the codex output as a result to the prompt.
+The back end should log all progress made and give codex some context for what it is working on.
+The project can maintain general project instructions in the standard agents.md and might keep a log of recent changes and updates in another file.
+The back end should provide codex with the tools for web searches and to run, test and debug code and data as well as provide access to previous prompts and change logs.
+The project can use git for any or all of its work tracking.
+
+

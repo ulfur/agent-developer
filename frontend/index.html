@@ -1,0 +1,3286 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <title>Agent Dev Host</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vuetify@3.7.4/dist/vuetify.min.css" />
+    <style>
+      :root {
+        --app-bg: #f3f4f6;
+        --app-surface: #ffffff;
+        --card-border: #d7dce3;
+        --text-primary: #1f2933;
+        --text-muted: #5d6675;
+        --prompt-bubble-bg: #ffffff;
+        --response-bubble-bg: #f8fafc;
+        --response-text: #111827;
+        --stream-bg: #f5f7fb;
+        --stream-border: #c8ceda;
+        --stderr-bg: #f1f5f9;
+        --detail-summary-bg: #eceff5;
+        --detail-panel-border: var(--stream-border);
+        --detail-panel-open-bg: var(--app-surface);
+        --divider-color: #d7dce3;
+        --prompt-sticky-offset: 96px;
+        --stdout-bg: var(--app-surface);
+        --stdout-text: var(--text-primary);
+      }
+
+      :root[data-theme="dark"] {
+        --app-bg: #0e1117;
+        --app-surface: #161b22;
+        --card-border: rgba(148, 163, 184, 0.35);
+        --text-primary: #e5e7eb;
+        --text-muted: #9ca3af;
+        --prompt-bubble-bg: #232c3d;
+        --response-bubble-bg: #162034;
+        --response-text: #f8fafc;
+        --stream-bg: rgba(31, 41, 55, 0.85);
+        --stream-border: rgba(148, 163, 184, 0.3);
+        --stderr-bg: rgba(148, 163, 184, 0.18);
+        --detail-summary-bg: rgba(148, 163, 184, 0.35);
+        --detail-panel-border: rgba(148, 163, 184, 0.45);
+        --detail-panel-open-bg: rgba(255, 255, 255, 0.08);
+        --divider-color: rgba(148, 163, 184, 0.35);
+        --prompt-sticky-offset: 96px;
+        --stdout-bg: #1e2430;
+        --stdout-text: #f3f4f6;
+      }
+
+      @media (max-width: 640px) {
+        :root,
+        :root[data-theme="dark"] {
+          --prompt-sticky-offset: 72px;
+        }
+      }
+
+      html,
+      body,
+      #app {
+        min-height: 100%;
+        margin: 0;
+        font-family: 'Roboto', sans-serif;
+        background-color: var(--app-bg);
+        color: var(--text-primary);
+      }
+
+      body {
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+
+      .v-application,
+      .v-layout {
+        min-height: 100%;
+      }
+
+      .v-main {
+        background-color: var(--app-bg);
+        min-height: calc(100vh - var(--v-layout-top, 64px));
+        padding-top: var(--v-layout-top, 64px);
+        box-sizing: border-box;
+      }
+
+      .main-layout {
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+        min-height: calc(100vh - var(--v-layout-top, 64px));
+      }
+
+      @media (min-width: 960px) {
+        .main-layout {
+          height: calc(100vh - var(--v-layout-top, 64px));
+        }
+      }
+
+      .main-row {
+        flex: 1;
+        min-height: 0;
+        height: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        align-content: stretch;
+        align-items: stretch;
+        overflow: hidden;
+      }
+
+      .settings-row {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-wrap: wrap;
+        align-content: stretch;
+        align-items: stretch;
+      }
+
+      .main-row > .v-col {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        height: 100%;
+        box-sizing: border-box;
+        max-width: 100%;
+        overflow: hidden;
+      }
+
+      .settings-row > .v-col {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      @media (min-width: 960px) {
+        .main-row {
+          flex-wrap: nowrap;
+        }
+        .main-row > .v-col {
+          max-height: 100%;
+        }
+        .settings-row {
+          flex-wrap: nowrap;
+        }
+      }
+
+      .panel-card {
+        border: 1px solid var(--card-border);
+        border-radius: 16px;
+        background-color: var(--app-surface);
+        max-width: 100%;
+      }
+
+      .queue-card,
+      .chat-card {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        max-height: 100%;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .log-card {
+        display: flex;
+        flex-direction: column;
+        max-width: 100%;
+      }
+
+      .settings-log-card {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      @media (min-width: 960px) {
+        .settings-log-card {
+          max-height: calc(100vh - var(--v-layout-top, 64px) - 96px);
+        }
+      }
+
+      .settings-log-card .log-card__body {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .settings-log-card .log-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: 100%;
+        max-height: none;
+      }
+
+      .log-card__header {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-start;
+      }
+
+      .log-card__actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .log-card__body {
+        min-height: 220px;
+      }
+
+      .log-content {
+        background-color: var(--stream-bg);
+        border: 1px solid var(--stream-border);
+        border-radius: 12px;
+        padding: 0.75rem 1rem;
+        font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.85rem;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 260px;
+        overflow-y: auto;
+      }
+
+      .log-content pre {
+        margin: 0;
+      }
+
+      .log-content--empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        font-style: italic;
+      }
+
+      .ssh-key-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .ssh-key-item {
+        border: 1px solid var(--card-border);
+        border-radius: 12px;
+        padding: 0.75rem 1rem;
+        background-color: var(--prompt-bubble-bg);
+      }
+
+      .ssh-key-header {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .ssh-key-text {
+        font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.85rem;
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .log-content__placeholder {
+        color: var(--text-muted);
+      }
+
+      .realtime-chip {
+        text-transform: none;
+        font-weight: 600;
+      }
+
+      .queue-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+        padding: 1.25rem 1.5rem;
+      }
+
+      .queue-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+      }
+
+      .queue-entry {
+        border: 1px solid var(--card-border);
+        border-radius: 12px;
+        background-color: var(--app-surface);
+        padding: 0.85rem 1rem;
+        text-align: left;
+        cursor: pointer;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        font: inherit;
+      }
+
+      .queue-entry:hover,
+      .queue-entry:focus-visible {
+        border-color: var(--text-muted);
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+        outline: none;
+      }
+
+      .queue-entry.active {
+        border-color: rgba(37, 99, 235, 0.65);
+        box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35);
+      }
+
+      .queue-entry-header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+        align-items: center;
+        font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.85rem;
+      }
+
+      .queue-entry-index {
+        font-weight: 600;
+      }
+
+      .queue-entry-status {
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+      }
+
+      .queue-entry-status.status-completed {
+        color: #22c55e;
+      }
+
+      .queue-entry-status.status-failed {
+        color: #f87171;
+      }
+
+      .queue-entry-status.status-running {
+        color: #facc15;
+      }
+
+      .queue-entry-status.status-queued {
+        color: #60a5fa;
+      }
+
+      .queue-entry-status.status-canceled {
+        color: #f97316;
+      }
+
+      .queue-entry-detail {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+
+      .chat-thread {
+        flex: 1;
+        min-height: 0;
+        padding: 1.25rem 1.5rem;
+        overflow-y: auto;
+        max-height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        position: relative;
+        scroll-padding-top: calc(var(--prompt-sticky-offset) + 1.5rem);
+      }
+
+      .attempt-entry {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+      }
+
+      .chat-message {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        max-width: 85%;
+      }
+
+      .chat-message.user {
+        align-self: flex-end;
+      }
+
+      .chat-message.codex {
+        align-self: flex-start;
+      }
+
+      .chat-bubble {
+        border-radius: 16px;
+        padding: 1.25rem;
+        border: 1px solid var(--card-border);
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+        position: relative;
+      }
+
+      .chat-bubble.copyable {
+        padding-right: 3.25rem;
+      }
+
+      .chat-bubble.prompt {
+        background-color: var(--prompt-bubble-bg);
+        color: var(--text-primary);
+      }
+
+      .chat-thread .chat-bubble.prompt {
+        position: sticky;
+        top: var(--prompt-sticky-offset);
+        z-index: 5;
+      }
+
+      .chat-bubble.response {
+        background-color: var(--response-bubble-bg);
+        color: var(--response-text);
+        max-height: none;
+        overflow: visible;
+      }
+
+      .stdout-block,
+      .stderr-block,
+      .context-block {
+        margin-top: 0.75rem;
+        padding: 0.85rem;
+        border-radius: 12px;
+        background-color: var(--stream-bg);
+        border: 1px solid var(--stream-border);
+        white-space: pre-wrap;
+        font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.92rem;
+        line-height: 1.5;
+      }
+
+      .stdout-block {
+        color: var(--stdout-text);
+        background-color: var(--stdout-bg);
+        max-height: min(75vh, 520px);
+        overflow-y: auto;
+      }
+
+      .stderr-block {
+        background-color: var(--stderr-bg);
+        color: inherit;
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        max-height: min(50vh, 520px);
+        overflow: scroll;
+      }
+
+      .stderr-segment {
+        white-space: inherit;
+        word-break: break-word;
+      }
+
+      .stderr-code-block,
+      .stderr-exec-block {
+        border: 1px dashed var(--stream-border);
+        border-radius: 10px;
+        padding: 0.35rem 0.65rem 0.65rem;
+        background-color: rgba(15, 23, 42, 0.04);
+      }
+
+      :root[data-theme='dark'] .stderr-code-block,
+      :root[data-theme='dark'] .stderr-exec-block {
+        background-color: rgba(255, 255, 255, 0.04);
+      }
+
+      .stderr-code-block summary,
+      .stderr-exec-block summary {
+        cursor: pointer;
+        list-style: none;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+
+      .stderr-code-block summary::-webkit-details-marker,
+      .stderr-exec-block summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .stderr-code-summary {
+        width: 100%;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+
+      .stderr-code-summary__label {
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 0.75rem;
+      }
+
+      .stderr-code-content {
+        margin-top: 0.5rem;
+        padding: 0.65rem;
+        border-radius: 8px;
+        background-color: rgba(15, 23, 42, 0.04);
+        color: inherit;
+        white-space: pre-wrap;
+        overflow-x: auto;
+      }
+
+      :root[data-theme='dark'] .stderr-code-content {
+        background-color: rgba(255, 255, 255, 0.04);
+      }
+
+      .context-block {
+        color: var(--text-primary);
+      }
+
+      .detail-footer {
+        border-top: 1px solid var(--divider-color);
+        padding: 0.75rem 1.5rem 1.25rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        flex-shrink: 0;
+      }
+
+      .queue-composer {
+        padding: 1rem 1.5rem 1.25rem;
+        background-color: var(--app-surface);
+        flex-shrink: 0;
+      }
+
+      .composer-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 0.75rem;
+        gap: 1rem;
+      }
+
+      .detail-panel {
+        margin-top: 0.8rem;
+        border-radius: 12px;
+        border: 1px solid var(--detail-panel-border);
+        background-color: var(--detail-summary-bg);
+        padding: 0.45rem 0.85rem;
+      }
+
+      .detail-panel summary {
+        cursor: pointer;
+        list-style: none;
+        font-weight: 500;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+
+      .detail-panel summary::marker {
+        display: none;
+      }
+
+      .detail-panel summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .detail-panel[open] {
+        background-color: var(--detail-panel-open-bg);
+      }
+
+      .detail-panel .detail-content {
+        margin-top: 0.75rem;
+      }
+
+      .message-meta {
+        display: flex;
+        gap: 0.85rem;
+        flex-wrap: wrap;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .message-meta--header {
+        padding-inline: 0.25rem;
+      }
+
+      .chat-bubble .message-meta {
+        margin-bottom: 0.75rem;
+      }
+
+      .prompt-text {
+        white-space: pre-wrap;
+        line-height: 1.6;
+      }
+
+      .copy-button {
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        cursor: pointer;
+        border-radius: 999px;
+        padding: 0.15rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: color 0.2s ease, background-color 0.2s ease;
+      }
+
+      .copy-button:hover,
+      .copy-button:focus-visible {
+        color: var(--text-primary);
+        background-color: rgba(148, 163, 184, 0.2);
+        outline: none;
+      }
+
+      .copy-button .mdi {
+        font-size: 1rem;
+      }
+
+      .copy-button--floating {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+      }
+
+      .prompt-bubble-actions {
+        position: absolute;
+        top: 0.65rem;
+        right: 0.65rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        align-items: flex-end;
+      }
+
+      .prompt-bubble-actions .copy-button {
+        padding: 0.05rem 0.3rem;
+        line-height: 1;
+      }
+
+      .prompt-edit-button .mdi {
+        font-size: 1rem;
+      }
+
+      .thread-header__actions {
+        margin-left: auto;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .stdout-empty {
+        opacity: 0.7;
+        font-style: italic;
+      }
+
+      .global-header {
+        background-color: var(--app-surface);
+        border-bottom: 1px solid var(--card-border);
+        padding-inline-end: 1.25rem;
+      }
+
+      .global-header__home-link {
+        font: inherit;
+        color: inherit;
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        text-decoration: none;
+      }
+
+      .global-header__home-link:focus-visible {
+        outline: 2px solid var(--card-border);
+        outline-offset: 2px;
+        border-radius: 6px;
+      }
+
+      .theme-toggle {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 88px;
+        height: 36px;
+        padding: 0 14px;
+        border-radius: 999px;
+        border: none;
+        background-color: var(--app-surface);
+        box-shadow: inset 0 0 0 1px var(--card-border);
+        cursor: pointer;
+        transition: background-color 0.2s ease, border-color 0.2s ease;
+        gap: 10px;
+        appearance: none;
+        font: inherit;
+        color: inherit;
+      }
+
+      .theme-toggle:focus-visible {
+        outline: 2px solid var(--card-border);
+        outline-offset: 2px;
+      }
+
+      .theme-toggle__icon {
+        font-size: 16px;
+        color: var(--text-muted);
+        pointer-events: none;
+      }
+
+      .theme-toggle__thumb {
+        position: absolute;
+        top: 3px;
+        left: 4px;
+        width: 38px;
+        height: 30px;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--app-bg);
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+        transition: transform 0.25s ease, background-color 0.2s ease;
+      }
+
+      .theme-toggle__thumb--right {
+        transform: translateX(36px);
+      }
+
+      .theme-toggle__thumb .mdi {
+        font-size: 18px;
+        color: var(--text-primary);
+      }
+
+      .header-theme-toggle {
+        margin-right: 1rem;
+      }
+
+      .queue-card-title {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .queue-card-title span:first-child {
+        font-size: 1rem;
+        font-weight: 500;
+      }
+
+      .chat-card-title__heading {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 1rem;
+        font-weight: 500;
+      }
+
+      .login-container {
+        min-height: calc(100vh - var(--v-layout-top, 64px));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1rem;
+      }
+
+      .login-wrapper {
+        width: 100%;
+        max-width: 420px;
+      }
+
+      .login-card {
+        padding-bottom: 1rem;
+      }
+
+      .user-summary {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 0.9rem;
+        color: var(--text-muted);
+      }
+
+      .user-summary__email {
+        font-weight: 600;
+      }
+
+      .user-menu__activator {
+        text-transform: none;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        color: var(--text-primary) !important;
+        font-weight: 600;
+      }
+
+      .user-menu__activator .mdi {
+        font-size: 18px;
+      }
+
+      .user-menu-card {
+        min-width: 250px;
+        padding: 0.25rem 0;
+      }
+
+      .user-menu-icon {
+        margin-right: 0.4rem;
+        font-size: 18px;
+      }
+
+      .logout-theme-toggle {
+        margin-left: 0.75rem;
+      }
+
+      .logout-list-item {
+        text-transform: none;
+      }
+
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/vue-router@4/dist/vue-router.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@3.7.4/dist/vuetify.min.js"></script>
+    <script>
+      const { createApp, ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
+      const { createVuetify, useTheme } = Vuetify;
+      const { createRouter, createWebHashHistory, useRoute, useRouter } = VueRouter;
+      const THEME_STORAGE_KEY = 'codex-theme-mode';
+      const AUTH_TOKEN_KEY = 'codex-auth-token';
+      const QUEUE_DETAIL_MAX = 160;
+      const WS_RECONNECT_MIN_MS = 1000;
+      const WS_RECONNECT_MAX_MS = 10000;
+      const LOG_REFRESH_INTERVAL_MS = 30000;
+
+      const createApiClient = (getToken, onUnauthorized) => {
+        return async (path, options = {}) => {
+          const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+          const token = typeof getToken === 'function' ? getToken() : null;
+          if (token) {
+            headers.Authorization = `Bearer ${token}`;
+          }
+          const response = await fetch(path, {
+            ...options,
+            headers,
+          });
+          if (response.status === 401 && typeof onUnauthorized === 'function') {
+            onUnauthorized();
+          }
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({ error: response.statusText }));
+            throw new Error(err.error || 'Request failed');
+          }
+          return response.json();
+        };
+      };
+
+      const vuetify = createVuetify({
+        theme: {
+          defaultTheme: 'dark',
+          themes: {
+            dark: {
+              dark: true,
+              colors: {
+                background: '#0e1117',
+                surface: '#161b22',
+                primary: '#2563eb',
+                secondary: '#7c3aed',
+                success: '#10b981',
+                warning: '#f97316',
+                error: '#ef4444',
+                info: '#38bdf8',
+              },
+            },
+            light: {
+              dark: false,
+              colors: {
+                background: '#f3f4f6',
+                surface: '#ffffff',
+                primary: '#1d4ed8',
+                secondary: '#7c3aed',
+                success: '#16a34a',
+                warning: '#fb923c',
+                error: '#dc2626',
+                info: '#0ea5e9',
+              },
+            },
+          },
+        },
+      });
+
+      const appRouter = createRouter({
+        history: createWebHashHistory(),
+        routes: [
+          {
+            path: '/settings',
+            name: 'settings',
+            component: { template: '<div />' },
+          },
+          {
+            path: '/:promptId?',
+            name: 'queue',
+            component: { template: '<div />' },
+          },
+        ],
+      });
+
+      createApp({
+        setup() {
+          const promptText = ref('');
+          const queue = ref([]);
+          const selectedPrompt = ref(null);
+          const loading = ref(true);
+          const submitting = ref(false);
+          const health = ref(null);
+          const operationsLog = ref('');
+          const logLoading = ref(false);
+          const logError = ref('');
+          const logLastUpdated = ref('');
+          const retrying = ref(false);
+          const canceling = ref(false);
+          const restarting = ref(false);
+          const deletePromptLoading = ref(false);
+          const promptStreams = reactive({});
+          const editPromptDialogVisible = ref(false);
+          const editPromptText = ref('');
+          const editPromptError = ref('');
+          const editPromptSaving = ref(false);
+          const websocketRef = ref(null);
+          const wsStatus = ref('disconnected');
+          const realtimeReady = ref(false);
+          const reconnectAttempts = ref(0);
+          const theme = useTheme();
+          const themeMode = ref('dark');
+          const route = useRoute();
+          const router = useRouter();
+          const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'long' });
+          const timeFormatter = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
+          const timestampFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+          const queueTimestampFormatter = new Intl.DateTimeFormat(undefined, {
+            month: 'short',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          const chatThreadRef = ref(null);
+          const chatThreadHeight = ref(0);
+          const liveStreamScrollRef = ref(null);
+          let chatThreadResizeObserver = null;
+          let reconnectTimer = null;
+          let logRefreshTimer = null;
+          let manualRealtimeClose = false;
+          const authToken = ref('');
+          const currentUser = ref(null);
+          const loginEmail = ref('ulfurk@ulfurk.com');
+          const loginPassword = ref('');
+          const showPassword = ref(false);
+          const loginError = ref('');
+          const loginLoading = ref(false);
+          const activeView = ref('queue');
+          const passwordForm = reactive({
+            current: '',
+            newValue: '',
+            confirm: '',
+          });
+          const passwordChangeLoading = ref(false);
+          const passwordChangeError = ref('');
+          const passwordChangeSuccess = ref('');
+          const sshKeys = ref([]);
+          const sshKeysLoading = ref(false);
+          const sshKeysError = ref('');
+          const sshKeysLastFetched = ref('');
+          const lastQueuePromptId = ref('');
+          const isAuthenticated = computed(() => Boolean(authToken.value));
+          const resetPasswordForm = () => {
+            passwordForm.current = '';
+            passwordForm.newValue = '';
+            passwordForm.confirm = '';
+          };
+          const resetSettingsState = () => {
+            passwordChangeError.value = '';
+            passwordChangeSuccess.value = '';
+            passwordChangeLoading.value = false;
+            sshKeys.value = [];
+            sshKeysError.value = '';
+            sshKeysLoading.value = false;
+            sshKeysLastFetched.value = '';
+            resetPasswordForm();
+          };
+          const openSettingsView = () => {
+            router.push({ name: 'settings' }).catch(() => {});
+          };
+          const returnToQueueView = () => {
+            resetSettingsState();
+            if (lastQueuePromptId.value) {
+              router.push({ name: 'queue', params: { promptId: lastQueuePromptId.value } }).catch(() => {});
+            } else {
+              router.push({ name: 'queue' }).catch(() => {});
+            }
+          };
+          const canSubmitPassword = computed(() => {
+            if (!passwordForm.current || !passwordForm.newValue || !passwordForm.confirm) {
+              return false;
+            }
+            if (passwordForm.newValue !== passwordForm.confirm) {
+              return false;
+            }
+            if (passwordForm.newValue === passwordForm.current) {
+              return false;
+            }
+            return passwordForm.newValue.length >= 8;
+          });
+
+          const clearRoutePrompt = () => {
+            const currentPrompt = normalizePromptId(route.params.promptId);
+            if (currentPrompt || route.name !== 'queue') {
+              router.replace({ name: 'queue' }).catch(() => {});
+            }
+          };
+
+          const goHome = () => {
+            resetSettingsState();
+            router.push({ name: 'queue' }).catch(() => {});
+          };
+
+          watch(
+            () => route.name,
+            (name, previous) => {
+              const nextView = name === 'settings' ? 'settings' : 'queue';
+              if (activeView.value !== nextView) {
+                activeView.value = nextView;
+              }
+              if (previous === 'settings' && nextView === 'queue') {
+                resetSettingsState();
+              }
+            },
+            { immediate: true }
+          );
+
+          watch(
+            () => [route.name, route.params.promptId],
+            ([name, promptId]) => {
+              if (name === 'queue') {
+                lastQueuePromptId.value = normalizePromptId(promptId);
+              }
+            },
+            { immediate: true }
+          );
+
+          const persistToken = (token) => {
+            if (typeof window === 'undefined' || !window.localStorage) {
+              return;
+            }
+            try {
+              if (token) {
+                window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+              } else {
+                window.localStorage.removeItem(AUTH_TOKEN_KEY);
+              }
+            } catch (error) {
+              console.warn('Unable to persist auth token', error);
+            }
+          };
+
+          const resetSessionState = () => {
+            queue.value = [];
+            selectedPrompt.value = null;
+            health.value = null;
+            promptText.value = '';
+            operationsLog.value = '';
+            logLastUpdated.value = '';
+            logError.value = '';
+            logLoading.value = false;
+            Object.keys(promptStreams).forEach((key) => delete promptStreams[key]);
+          };
+
+          const buildWebSocketUrl = () => {
+            if (typeof window === 'undefined') {
+              return '';
+            }
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            return `${protocol}//${window.location.host}/ws`;
+          };
+
+          const clearReconnectTimer = () => {
+            if (reconnectTimer) {
+              clearTimeout(reconnectTimer);
+              reconnectTimer = null;
+            }
+          };
+
+          const clearLogRefreshTimer = () => {
+            if (logRefreshTimer) {
+              clearInterval(logRefreshTimer);
+              logRefreshTimer = null;
+            }
+          };
+
+          const stopLogRefresh = () => {
+            clearLogRefreshTimer();
+          };
+
+          const disconnectRealtime = ({ manual = false } = {}) => {
+            if (manual) {
+              manualRealtimeClose = true;
+            }
+            clearReconnectTimer();
+            realtimeReady.value = false;
+            wsStatus.value = 'disconnected';
+            const socket = websocketRef.value;
+            if (socket) {
+              websocketRef.value = null;
+              try {
+                socket.close();
+              } catch (error) {
+                console.warn('Unable to close realtime socket', error);
+              }
+            }
+          };
+
+          const scheduleReconnect = () => {
+            if (!isAuthenticated.value || manualRealtimeClose) {
+              return;
+            }
+            clearReconnectTimer();
+            const attempt = reconnectAttempts.value + 1;
+            reconnectAttempts.value = attempt;
+            const delay = Math.min(WS_RECONNECT_MIN_MS * 2 ** (attempt - 1), WS_RECONNECT_MAX_MS);
+            reconnectTimer = setTimeout(() => {
+              connectRealtime();
+            }, delay);
+          };
+
+          const sendRealtimeMessage = (message) => {
+            if (!websocketRef.value || websocketRef.value.readyState !== WebSocket.OPEN) {
+              return false;
+            }
+            try {
+              websocketRef.value.send(JSON.stringify(message));
+              return true;
+            } catch (error) {
+              console.error('Unable to send realtime payload', error);
+              return false;
+            }
+          };
+
+          const handleRealtimeMessage = (event) => {
+            let packet;
+            try {
+              packet = JSON.parse(event.data);
+            } catch (error) {
+              console.warn('Unable to parse realtime payload', error);
+              return;
+            }
+            const { type, payload } = packet || {};
+            switch (type) {
+              case 'auth_ok':
+                realtimeReady.value = true;
+                if (payload?.user) {
+                  currentUser.value = payload.user;
+                }
+                loading.value = false;
+                sendRealtimeMessage({ type: 'request_queue' });
+                if (selectedPrompt.value?.prompt_id) {
+                  sendRealtimeMessage({ type: 'fetch_prompt', prompt_id: selectedPrompt.value.prompt_id });
+                }
+                break;
+              case 'queue_snapshot':
+                updateQueue(payload?.items || []);
+                loading.value = false;
+                break;
+              case 'prompt_update':
+                if (payload?.prompt) {
+                  mergeQueueEntry(payload.prompt);
+                  if (selectedPrompt.value?.prompt_id === payload.prompt.prompt_id) {
+                    selectedPrompt.value = payload.prompt;
+                  }
+                  const status = (payload.prompt.status || '').toLowerCase();
+                  if (status === 'completed' || status === 'failed') {
+                    clearStreamState(payload.prompt.prompt_id);
+                  }
+                }
+                break;
+              case 'prompt_deleted': {
+                const deletedId = payload?.prompt_id;
+                if (deletedId) {
+                  const index = queue.value.findIndex((item) => item.prompt_id === deletedId);
+                  if (index !== -1) {
+                    queue.value.splice(index, 1);
+                  }
+                  if (selectedPrompt.value?.prompt_id === deletedId) {
+                    selectedPrompt.value = null;
+                    router.replace({ name: 'queue' }).catch(() => {});
+                  }
+                  clearStreamState(deletedId);
+                }
+                break;
+              }
+              case 'health':
+                health.value = payload;
+                break;
+              case 'prompt_stream':
+                handleStreamPayload(payload);
+                break;
+              case 'hello':
+              case 'pong':
+                break;
+              case 'error':
+                console.error('Realtime error', payload?.message || payload);
+                break;
+              default:
+                console.debug('Unhandled realtime packet', packet);
+            }
+          };
+
+          const handleStreamPayload = (payload) => {
+            const promptId = payload?.prompt_id;
+            if (!promptId) {
+              return;
+            }
+            const streamName = (payload?.stream || '').toLowerCase();
+            if (streamName !== 'stdout' && streamName !== 'stderr') {
+              return;
+            }
+            const state = getStreamState(promptId);
+            if (!state) {
+              return;
+            }
+            const timestamp = payload.timestamp || new Date().toISOString();
+            if (payload.reset) {
+              state.stdout = '';
+              state.stderr = '';
+              state.done = false;
+              state.started_at = timestamp;
+            }
+            if (!state.started_at) {
+              state.started_at = timestamp;
+            }
+            if (typeof payload.chunk === 'string' && payload.chunk.length) {
+              state[streamName] = (state[streamName] || '') + payload.chunk;
+            }
+            if (payload.done) {
+              state.done = true;
+            }
+            state.updated_at = timestamp;
+            if (selectedPrompt.value?.prompt_id === promptId) {
+              selectedPrompt.value = {
+                ...selectedPrompt.value,
+                live_stream: { ...state },
+              };
+            }
+          };
+
+          const connectRealtime = () => {
+            if (!isAuthenticated.value || wsStatus.value === 'connecting' || wsStatus.value === 'open') {
+              return;
+            }
+            manualRealtimeClose = false;
+            clearReconnectTimer();
+            const url = buildWebSocketUrl();
+            if (!url) {
+              return;
+            }
+            wsStatus.value = 'connecting';
+            try {
+              const socket = new WebSocket(url);
+              websocketRef.value = socket;
+
+              socket.addEventListener('open', () => {
+                wsStatus.value = 'open';
+                reconnectAttempts.value = 0;
+                sendRealtimeMessage({ type: 'auth', token: authToken.value });
+              });
+              socket.addEventListener('message', handleRealtimeMessage);
+              socket.addEventListener('close', () => {
+                websocketRef.value = null;
+                realtimeReady.value = false;
+                wsStatus.value = 'closed';
+                if (!manualRealtimeClose) {
+                  scheduleReconnect();
+                }
+              });
+              socket.addEventListener('error', (error) => {
+                console.error('Realtime socket error', error);
+                socket.close();
+              });
+            } catch (error) {
+              console.error('Unable to open realtime socket', error);
+              scheduleReconnect();
+            }
+          };
+
+          const handleUnauthorized = (message) => {
+            disconnectRealtime({ manual: true });
+            stopLogRefresh();
+            resetSessionState();
+            resetSettingsState();
+            activeView.value = 'queue';
+            authToken.value = '';
+            currentUser.value = null;
+            loading.value = false;
+            submitting.value = false;
+            retrying.value = false;
+            canceling.value = false;
+            restarting.value = false;
+            persistToken('');
+            clearRoutePrompt();
+            if (message) {
+              loginError.value = message;
+            }
+          };
+
+          const api = createApiClient(
+            () => authToken.value,
+            () => handleUnauthorized('Session expired. Please sign in again.')
+          );
+
+          const formatDate = (isoString) => {
+            if (!isoString) return '—';
+            try {
+              const date = new Date(isoString);
+              return `${dateFormatter.format(date)} at ${timeFormatter.format(date)}`;
+            } catch (error) {
+              console.error('Unable to format date', error);
+              return isoString;
+            }
+          };
+
+          const formatTimestamp = (isoString) => {
+            if (!isoString) return '—';
+            try {
+              return timestampFormatter.format(new Date(isoString));
+            } catch (error) {
+              console.error('Unable to format timestamp', error);
+              return isoString;
+            }
+          };
+
+          const formatDuration = (seconds) => {
+            if (seconds == null || Number.isNaN(seconds)) {
+              return '—';
+            }
+            if (seconds < 1) {
+              return `${Math.round(seconds * 1000)} ms`;
+            }
+            if (seconds < 10) {
+              return `${seconds.toFixed(1)} s`;
+            }
+            return `${Math.round(seconds)} s`;
+          };
+
+          const formatQueueDuration = (seconds) => {
+            if (seconds == null || Number.isNaN(seconds)) {
+              return '—';
+            }
+            const totalSeconds = Math.max(0, Math.round(seconds));
+            const minutes = Math.floor(totalSeconds / 60);
+            const remainingSeconds = totalSeconds % 60;
+            return `${minutes}m ${remainingSeconds.toString().padStart(2, '0')}s`;
+          };
+
+          const normalizeWhitespace = (value) => {
+            if (!value) return '';
+            return value.replace(/\s+/g, ' ').trim();
+          };
+
+          const CODE_FENCE_REGEX = /```([\s\S]*?)```/g;
+          const CODE_PREVIEW_MAX_CHARS = 96;
+
+          const buildCodeBlockPreview = (content) => {
+            if (!content) {
+              return 'Code block';
+            }
+            const normalized = content.replace(/\s+/g, ' ').trim();
+            if (!normalized) {
+              return 'Code block';
+            }
+            if (normalized.length > CODE_PREVIEW_MAX_CHARS) {
+              return `${normalized.slice(0, CODE_PREVIEW_MAX_CHARS - 1)}…`;
+            }
+            return normalized;
+          };
+
+          const collapseThinkingSections = (content) => {
+            if (!content || !content.includes('thinking')) {
+              return content;
+            }
+            const lines = content.split('\n');
+            if (lines.length < 3) {
+              return content;
+            }
+            const collapsedLines = [];
+            for (let i = 0; i < lines.length; i++) {
+              const trimmed = lines[i].trim();
+              if (trimmed !== 'thinking') {
+                collapsedLines.push(lines[i]);
+                continue;
+              }
+              const titleLine = lines[i + 1];
+              if (!titleLine) {
+                collapsedLines.push(lines[i]);
+                continue;
+              }
+              const titleMatch = titleLine.trim().match(/^\*\*(.+?)\*\*$/);
+              if (!titleMatch) {
+                collapsedLines.push(lines[i]);
+                continue;
+              }
+              const titleText = titleMatch[1].trim() || titleMatch[1];
+              let nextIndex = i + 2;
+              while (nextIndex < lines.length && !lines[nextIndex].trim()) {
+                nextIndex += 1;
+              }
+              if (nextIndex < lines.length) {
+                const candidate = lines[nextIndex].trim();
+                if (candidate && candidate.toLowerCase() !== 'thinking' && !candidate.startsWith('**')) {
+                  nextIndex += 1;
+                }
+              }
+              collapsedLines.push(titleText);
+              i = nextIndex - 1;
+            }
+            return collapsedLines.join('\n');
+          };
+
+          const parseCodeAndTextSegments = (chunk) => {
+            const rawContent = chunk == null ? '' : String(chunk);
+            if (!rawContent) {
+              return [];
+            }
+            const content = collapseThinkingSections(rawContent);
+            const segments = [];
+            let lastIndex = 0;
+            CODE_FENCE_REGEX.lastIndex = 0;
+            let match;
+            while ((match = CODE_FENCE_REGEX.exec(content)) !== null) {
+              if (match.index > lastIndex) {
+                segments.push({
+                  type: 'text',
+                  content: content.slice(lastIndex, match.index),
+                });
+              }
+              const rawBlock = match[1] || '';
+              let language = '';
+              let codeContent = rawBlock;
+              const newlineIndex = rawBlock.indexOf('\n');
+              if (newlineIndex !== -1) {
+                const firstLine = rawBlock.slice(0, newlineIndex).trim();
+                const remainder = rawBlock.slice(newlineIndex + 1);
+                if (firstLine && remainder) {
+                  language = firstLine;
+                  codeContent = remainder;
+                } else if (!firstLine) {
+                  codeContent = remainder;
+                }
+              }
+              segments.push({
+                type: 'code',
+                language,
+                content: codeContent,
+                preview: buildCodeBlockPreview(codeContent || rawBlock),
+              });
+              lastIndex = match.index + match[0].length;
+            }
+            if (lastIndex < content.length) {
+              segments.push({
+                type: 'text',
+                content: content.slice(lastIndex),
+              });
+            }
+            return segments;
+          };
+
+          const findCollapseRanges = (text) => {
+            if (!text) {
+              return [];
+            }
+            const normalizedText = text.toLowerCase();
+            if (!normalizedText.includes('exec') && !normalizedText.includes('file update')) {
+              return [];
+            }
+            const lines = text.split('\n');
+            const linePositions = [];
+            let cursor = 0;
+            for (let i = 0; i < lines.length; i++) {
+              const lineText = lines[i];
+              const start = cursor;
+              const end = start + lineText.length;
+              const newlineLength = i < lines.length - 1 ? 1 : 0;
+              linePositions.push({
+                value: lineText,
+                start,
+                end,
+                newlineLength,
+              });
+              cursor = end + newlineLength;
+            }
+            const ranges = [];
+            for (let i = 0; i < linePositions.length; i++) {
+              const entry = linePositions[i];
+              const trimmedValue = entry.value.trim();
+              const normalizedLine = trimmedValue.toLowerCase();
+              let markerType = null;
+              if (normalizedLine === 'exec') {
+                markerType = 'exec';
+              } else if (normalizedLine === 'file update' || normalizedLine.startsWith('file update:')) {
+                markerType = 'file-update';
+              } else {
+                continue;
+              }
+              const rangeStart = entry.end + entry.newlineLength;
+              if (rangeStart >= text.length) {
+                continue;
+              }
+              let rangeEnd = text.length;
+              for (let j = i + 1; j < linePositions.length; j++) {
+                if (linePositions[j].value.trim() === 'thinking') {
+                  rangeEnd = linePositions[j].start;
+                  break;
+                }
+              }
+              if (rangeEnd <= rangeStart) {
+                continue;
+              }
+              ranges.push({ start: rangeStart, end: rangeEnd, type: markerType });
+            }
+            return ranges;
+          };
+
+          const parseOutputSegments = (value) => {
+            const text = value == null ? '' : String(value);
+            if (!text) {
+              return [];
+            }
+            const collapseRanges = findCollapseRanges(text);
+            if (!collapseRanges.length) {
+              return parseCodeAndTextSegments(text);
+            }
+            const segments = [];
+            let cursor = 0;
+            const sortedRanges = collapseRanges.slice().sort((a, b) => a.start - b.start);
+            sortedRanges.forEach((range) => {
+              if (cursor < range.start) {
+                const chunk = text.slice(cursor, range.start);
+                segments.push(...parseCodeAndTextSegments(chunk));
+              }
+              const collapsedStart = Math.max(cursor, range.start);
+              const collapsedEnd = Math.max(collapsedStart, range.end);
+              if (collapsedEnd > collapsedStart) {
+                const collapsedContent = text.slice(collapsedStart, collapsedEnd);
+                if (collapsedContent) {
+                  const previewText = buildCodeBlockPreview(collapsedContent);
+                  segments.push({
+                    type: range.type,
+                    content: collapsedContent,
+                    preview:
+                      previewText === 'Code block'
+                        ? range.type === 'file-update'
+                          ? 'File diff'
+                          : 'Command output'
+                        : previewText,
+                  });
+                }
+              }
+              cursor = Math.max(cursor, range.end);
+            });
+            if (cursor < text.length) {
+              segments.push(...parseCodeAndTextSegments(text.slice(cursor)));
+            }
+            return segments;
+          };
+
+          const formatQueueTimestamp = (isoString) => {
+            if (!isoString) return '--';
+            try {
+              return queueTimestampFormatter.format(new Date(isoString));
+            } catch (error) {
+              console.error('Unable to format queue timestamp', error);
+              return isoString;
+            }
+          };
+
+          const normalizePromptId = (value) => {
+            if (value == null) {
+              return '';
+            }
+            return String(value);
+          };
+
+          const computeRuntimeSeconds = (startIso, endIso) => {
+            if (!startIso || !endIso) {
+              return null;
+            }
+            const start = new Date(startIso);
+            const end = new Date(endIso);
+            const elapsedMs = end - start;
+            if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+              return null;
+            }
+            return elapsedMs / 1000;
+          };
+
+          const getStreamState = (promptId) => {
+            if (!promptId) return null;
+            if (!promptStreams[promptId]) {
+              promptStreams[promptId] = {
+                stdout: '',
+                stderr: '',
+                updated_at: null,
+                started_at: null,
+                done: false,
+              };
+            }
+            return promptStreams[promptId];
+          };
+
+          const clearStreamState = (promptId) => {
+            if (!promptId || !promptStreams[promptId]) return;
+            delete promptStreams[promptId];
+            if (selectedPrompt.value?.prompt_id === promptId) {
+              selectedPrompt.value = { ...selectedPrompt.value, live_stream: null };
+            }
+          };
+
+          const updateQueue = (items = []) => {
+            const normalized = items.map((item) => ({ ...item }));
+            if (!queue.value.length) {
+              queue.value = normalized;
+              return;
+            }
+            const existingLookup = new Map(queue.value.map((entry) => [entry.prompt_id, entry]));
+            const merged = normalized.map((item) => {
+              const current = existingLookup.get(item.prompt_id);
+              if (current) {
+                Object.assign(current, item);
+                return current;
+              }
+              return item;
+            });
+            queue.value.splice(0, queue.value.length, ...merged);
+          };
+
+          const mergeQueueEntry = (entry) => {
+            if (!entry || !entry.prompt_id) {
+              return;
+            }
+            const index = queue.value.findIndex((item) => item.prompt_id === entry.prompt_id);
+            if (index === -1) {
+              queue.value.unshift({ ...entry });
+              return;
+            }
+            Object.assign(queue.value[index], entry);
+          };
+
+          const formatStatus = (status) => {
+            if (!status) return 'Unknown';
+            const normalized = status.toString().toLowerCase();
+            return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+          };
+
+          const isFailedStatus = (status) => (status || '').toLowerCase() === 'failed';
+          const isRunningStatus = (status) => (status || '').toLowerCase() === 'running';
+
+          const attemptLogs = computed(() => {
+            if (!selectedPrompt.value?.attempt_logs?.length) {
+              return [];
+            }
+            return [...selectedPrompt.value.attempt_logs].sort((a, b) => {
+              return new Date(a.received_at || 0) - new Date(b.received_at || 0);
+            });
+          });
+
+          const globalContext = computed(() => selectedPrompt.value?.agents_context || '');
+
+          const activeStream = computed(() => {
+            const id = selectedPrompt.value?.prompt_id;
+            if (!id) return null;
+            return promptStreams[id] || null;
+          });
+
+          const showLiveStream = computed(() => {
+            const stream = activeStream.value;
+            if (!stream) {
+              return false;
+            }
+            if (stream.stdout || stream.stderr) {
+              return true;
+            }
+            return !stream.done;
+          });
+
+          const liveAttemptNumber = computed(() => {
+            if (!showLiveStream.value) {
+              return null;
+            }
+            const reportedAttempts = Number(selectedPrompt.value?.attempts);
+            if (Number.isFinite(reportedAttempts) && reportedAttempts > attemptLogs.value.length) {
+              return reportedAttempts;
+            }
+            return attemptLogs.value.length + 1;
+          });
+
+          const liveAttemptReceivedAt = computed(() => {
+            const stream = activeStream.value;
+            if (stream?.started_at) {
+              return stream.started_at;
+            }
+            return selectedPrompt.value?.updated_at || selectedPrompt.value?.created_at || null;
+          });
+
+          const liveAttemptDurationSeconds = computed(() => {
+            const stream = activeStream.value;
+            if (!stream) {
+              return null;
+            }
+            const start = liveAttemptReceivedAt.value;
+            if (!start || !stream.updated_at) {
+              return null;
+            }
+            return computeRuntimeSeconds(start, stream.updated_at);
+          });
+
+          const queueEntries = computed(() => {
+            return queue.value.map((item, index) => {
+              const status = (item.status || '').toLowerCase();
+              const isCompleted = status === 'completed';
+              const isFailed = status === 'failed';
+              const isCanceled = status === 'canceled';
+              const runtimeSeconds =
+                isCompleted || isFailed || isCanceled
+                  ? computeRuntimeSeconds(item.created_at, item.updated_at)
+                  : null;
+              let detailSource = item.text || '';
+              if (isCompleted) {
+                detailSource = item.stdout_preview || item.result_summary || '';
+              } else if (isCanceled) {
+                detailSource = item.result_summary || 'Prompt canceled by user';
+              }
+              const normalizedDetail = normalizeWhitespace(detailSource);
+              const placeholder = isCompleted
+                ? 'Stdout unavailable'
+                : isCanceled
+                  ? 'Prompt canceled'
+                  : 'Prompt unavailable';
+              const detail =
+                normalizedDetail.length > QUEUE_DETAIL_MAX
+                  ? `${normalizedDetail.slice(0, QUEUE_DETAIL_MAX - 1)}…`
+                  : normalizedDetail || placeholder;
+              return {
+                ...item,
+                queueIndex: index + 1,
+                createdDisplay: formatQueueTimestamp(item.created_at),
+                runtimeDisplay: runtimeSeconds != null ? formatQueueDuration(runtimeSeconds) : null,
+                detailLine: detail,
+              };
+            });
+          });
+
+          const canEditSelectedPrompt = computed(() => {
+            if (!selectedPrompt.value) {
+              return false;
+            }
+            return (selectedPrompt.value.status || '').toLowerCase() === 'queued';
+          });
+
+          const canDeleteSelectedPrompt = computed(() => canEditSelectedPrompt.value);
+          const canCancelSelectedPrompt = computed(() => {
+            if (!selectedPrompt.value) {
+              return false;
+            }
+            return isRunningStatus(selectedPrompt.value.status);
+          });
+          const canRestartSelectedPrompt = computed(() => {
+            if (!selectedPrompt.value) {
+              return false;
+            }
+            return (selectedPrompt.value.status || '').toLowerCase() === 'canceled';
+          });
+
+          const attemptKey = (attempt, index) => `${attempt.received_at || 'attempt'}-${index}`;
+
+          const copyToClipboard = async (value) => {
+            const text = value == null ? '' : String(value);
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (error) {
+              const textarea = document.createElement('textarea');
+              textarea.value = text;
+              textarea.style.position = 'fixed';
+              textarea.style.opacity = '0';
+              textarea.style.pointerEvents = 'none';
+              document.body.appendChild(textarea);
+              textarea.focus();
+              textarea.select();
+              try {
+                document.execCommand('copy');
+              } finally {
+                textarea.remove();
+              }
+            }
+          };
+
+          const updateChatThreadHeight = () => {
+            chatThreadHeight.value = chatThreadRef.value?.clientHeight || 0;
+          };
+
+          const handleWindowResize = () => {
+            updateChatThreadHeight();
+          };
+
+          const scrollElementToBottom = (elementRef) => {
+            nextTick(() => {
+              const target = elementRef?.value;
+              if (target) {
+                target.scrollTop = target.scrollHeight;
+              }
+            });
+          };
+
+          const scrollChatThreadToBottom = () => {
+            scrollElementToBottom(chatThreadRef);
+          };
+
+          const scrollLiveStreamToBottom = () => {
+            scrollElementToBottom(liveStreamScrollRef);
+          };
+
+          watch(
+            () => chatThreadRef.value,
+            (element) => {
+              if (chatThreadResizeObserver) {
+                chatThreadResizeObserver.disconnect();
+                chatThreadResizeObserver = null;
+              }
+              if (element && typeof ResizeObserver !== 'undefined') {
+                chatThreadResizeObserver = new ResizeObserver(() => updateChatThreadHeight());
+                chatThreadResizeObserver.observe(element);
+              }
+              nextTick(() => updateChatThreadHeight());
+            },
+            { immediate: true }
+          );
+
+          watch(attemptLogs, () => {
+            scrollChatThreadToBottom();
+          });
+
+          watch(
+            () => selectedPrompt.value?.prompt_id,
+            () => {
+              nextTick(() => {
+                updateChatThreadHeight();
+              });
+            }
+          );
+
+          watch(
+            () => selectedPrompt.value?.prompt_id,
+            (promptId, previousId) => {
+              if (
+                editPromptDialogVisible.value &&
+                (promptId !== previousId || !promptId)
+              ) {
+                clearEditPromptState();
+              }
+            }
+          );
+
+          watch(
+            () => selectedPrompt.value?.status,
+            (status) => {
+              if (
+                editPromptDialogVisible.value &&
+                (status || '').toLowerCase() !== 'queued'
+              ) {
+                clearEditPromptState();
+              }
+            }
+          );
+
+          watch(showLiveStream, (visible) => {
+            nextTick(() => {
+              updateChatThreadHeight();
+            });
+            if (visible) {
+              scrollLiveStreamToBottom();
+            }
+          });
+
+          watch(
+            () => [activeStream.value?.stdout, activeStream.value?.stderr],
+            () => {
+              scrollChatThreadToBottom();
+              scrollLiveStreamToBottom();
+            }
+          );
+
+          watch(
+            isAuthenticated,
+            (authed) => {
+              if (authed) {
+                fetchProgressLog();
+                startLogRefresh();
+              } else {
+                stopLogRefresh();
+                operationsLog.value = '';
+                logLastUpdated.value = '';
+                logError.value = '';
+                logLoading.value = false;
+                activeView.value = 'queue';
+                resetSettingsState();
+              }
+            },
+            { immediate: true }
+          );
+
+          watch(
+            () => [isAuthenticated.value, route.name, route.params.promptId],
+            async ([authed, routeName, routePrompt]) => {
+              if (!authed || routeName !== 'queue') {
+                return;
+              }
+              const normalizedId = normalizePromptId(routePrompt).trim();
+              if (!normalizedId) {
+                if (selectedPrompt.value) {
+                  selectedPrompt.value = null;
+                }
+                return;
+              }
+              if (selectedPrompt.value?.prompt_id === normalizedId) {
+                return;
+              }
+              try {
+                await selectPrompt(normalizedId, { updateRoute: false });
+              } catch (error) {
+                console.error('Unable to restore prompt from route', error);
+              }
+            },
+            { immediate: true }
+          );
+
+          const fetchPrompts = async (options = {}) => {
+            if (!isAuthenticated.value) {
+              loading.value = false;
+              return;
+            }
+            const { silent = false } = options;
+            if (!silent) {
+              loading.value = true;
+            }
+            try {
+              const data = await api('/api/prompts');
+              updateQueue(data.items || []);
+            } catch (error) {
+              console.error(error);
+            } finally {
+              if (!silent) {
+                loading.value = false;
+              }
+            }
+          };
+
+          const fetchHealth = async () => {
+            if (!isAuthenticated.value) {
+              return;
+            }
+            try {
+              const data = await api('/api/health');
+              health.value = data;
+              if (data?.user) {
+                currentUser.value = data.user;
+              }
+            } catch (error) {
+              console.error(error);
+            }
+          };
+
+          const fetchProgressLog = async (options = {}) => {
+            if (!isAuthenticated.value) {
+              return;
+            }
+            const { silent = false } = options;
+            if (!silent) {
+              logLoading.value = true;
+            }
+            logError.value = '';
+            try {
+              const data = await api('/api/logs');
+              const rawLog = data?.log || '';
+              const lines = rawLog ? rawLog.split(/\r?\n/) : [];
+              while (lines.length && lines[lines.length - 1] === '') {
+                lines.pop();
+              }
+              operationsLog.value = lines.reverse().join('\n');
+              logLastUpdated.value = new Date().toISOString();
+            } catch (error) {
+              logError.value = error.message || 'Unable to load progress log';
+            } finally {
+              if (!silent) {
+                logLoading.value = false;
+              }
+            }
+          };
+
+          const startLogRefresh = () => {
+            clearLogRefreshTimer();
+            if (!isAuthenticated.value) {
+              return;
+            }
+            logRefreshTimer = setInterval(() => {
+              fetchProgressLog({ silent: true }).catch(() => {});
+            }, LOG_REFRESH_INTERVAL_MS);
+          };
+
+          const refreshProgressLog = () => {
+            fetchProgressLog();
+          };
+
+          const changePassword = async () => {
+            if (!isAuthenticated.value || passwordChangeLoading.value) {
+              return;
+            }
+            if (!passwordForm.current || !passwordForm.newValue || !passwordForm.confirm) {
+              passwordChangeError.value = 'All password fields are required';
+              passwordChangeSuccess.value = '';
+              return;
+            }
+            if (passwordForm.newValue !== passwordForm.confirm) {
+              passwordChangeError.value = 'New password and confirmation do not match';
+              passwordChangeSuccess.value = '';
+              return;
+            }
+            if (passwordForm.newValue.length < 8) {
+              passwordChangeError.value = 'New password must be at least 8 characters';
+              passwordChangeSuccess.value = '';
+              return;
+            }
+            if (passwordForm.newValue === passwordForm.current) {
+              passwordChangeError.value = 'New password must be different from the current password';
+              passwordChangeSuccess.value = '';
+              return;
+            }
+            passwordChangeError.value = '';
+            passwordChangeSuccess.value = '';
+            passwordChangeLoading.value = true;
+            try {
+              await api('/api/user/password', {
+                method: 'POST',
+                body: JSON.stringify({
+                  current_password: passwordForm.current,
+                  new_password: passwordForm.newValue,
+                }),
+              });
+              passwordChangeSuccess.value = 'Password updated successfully.';
+              resetPasswordForm();
+            } catch (error) {
+              passwordChangeError.value = error.message || 'Unable to change password';
+            } finally {
+              passwordChangeLoading.value = false;
+            }
+          };
+
+          const fetchSshKeys = async () => {
+            if (!isAuthenticated.value) {
+              return;
+            }
+            sshKeysLoading.value = true;
+            sshKeysError.value = '';
+            try {
+              const response = await api('/api/user/ssh_keys');
+              const items = Array.isArray(response?.keys) ? response.keys : [];
+              sshKeys.value = items;
+              sshKeysLastFetched.value = new Date().toISOString();
+            } catch (error) {
+              sshKeys.value = [];
+              sshKeysError.value = error.message || 'Unable to load SSH keys';
+            } finally {
+              sshKeysLoading.value = false;
+            }
+          };
+
+          watch(
+            () => activeView.value,
+            (view) => {
+              if (view === 'settings') {
+                fetchSshKeys();
+              }
+            }
+          );
+
+          const submitPrompt = async () => {
+            if (!isAuthenticated.value || !promptText.value.trim()) return;
+            submitting.value = true;
+            try {
+              const response = await api('/api/prompts', {
+                method: 'POST',
+                body: JSON.stringify({ prompt: promptText.value }),
+              });
+              promptText.value = '';
+              if (response?.prompt_id) {
+                await selectPrompt({ prompt_id: response.prompt_id });
+              }
+              if (!realtimeReady.value) {
+                await fetchPrompts({ silent: true });
+              }
+            } catch (error) {
+              alert(error.message);
+            } finally {
+              submitting.value = false;
+            }
+          };
+
+          const handleComposerKeydown = (event) => {
+            if (event.shiftKey) {
+              return;
+            }
+            event.preventDefault();
+            if (!promptText.value.trim() || submitting.value) {
+              return;
+            }
+            submitPrompt();
+          };
+
+          const refreshSelectedPrompt = async (promptId) => {
+            if (!isAuthenticated.value) return;
+            const targetId = promptId || selectedPrompt.value?.prompt_id;
+            if (!targetId) return;
+            if (realtimeReady.value && sendRealtimeMessage({ type: 'fetch_prompt', prompt_id: targetId })) {
+              return;
+            }
+            try {
+              const data = await api(`/api/prompts/${targetId}`);
+              if (!selectedPrompt.value || selectedPrompt.value.prompt_id === targetId) {
+                selectedPrompt.value = data;
+              }
+            } catch (error) {
+              console.error(error);
+            }
+          };
+
+          const selectPrompt = async (prompt, options = {}) => {
+            if (!prompt) return;
+            const { updateRoute = true } = options;
+            const promptId =
+              typeof prompt === 'string' ? normalizePromptId(prompt) : normalizePromptId(prompt.prompt_id);
+            if (!promptId) {
+              return;
+            }
+            const matchingEntry =
+              typeof prompt === 'object' && prompt.prompt_id
+                ? prompt
+                : queue.value.find((item) => item.prompt_id === promptId);
+            if (!selectedPrompt.value || selectedPrompt.value.prompt_id !== promptId) {
+              selectedPrompt.value = matchingEntry ? { ...matchingEntry } : { prompt_id: promptId };
+            } else if (matchingEntry) {
+              selectedPrompt.value = { ...selectedPrompt.value, ...matchingEntry };
+            }
+            if (updateRoute && route.params.promptId !== promptId) {
+              router.replace({ name: 'queue', params: { promptId } }).catch(() => {});
+            }
+            await refreshSelectedPrompt(promptId);
+          };
+
+          const queuePromptRetry = async (stateRef, errorMessage) => {
+            const currentId = selectedPrompt.value?.prompt_id;
+            if (!currentId || stateRef.value) {
+              return;
+            }
+            stateRef.value = true;
+            try {
+              await api(`/api/prompts/${currentId}/retry`, { method: 'POST' });
+              if (!realtimeReady.value) {
+                await fetchPrompts({ silent: true });
+              }
+              const refreshed = queue.value.find((item) => item.prompt_id === currentId) || { prompt_id: currentId };
+              await selectPrompt(refreshed);
+            } catch (error) {
+              alert(error.message || errorMessage);
+            } finally {
+              stateRef.value = false;
+            }
+          };
+
+          const retryPrompt = async () => {
+            if (!isAuthenticated.value || !selectedPrompt.value) return;
+            await queuePromptRetry(retrying, 'Unable to retry prompt');
+          };
+
+          const restartSelectedPrompt = async () => {
+            if (!isAuthenticated.value || !selectedPrompt.value || !canRestartSelectedPrompt.value) {
+              return;
+            }
+            await queuePromptRetry(restarting, 'Unable to restart prompt');
+          };
+
+          const performCancelAction = async () => {
+            if (!isAuthenticated.value || !selectedPrompt.value || !canCancelSelectedPrompt.value) {
+              return;
+            }
+            if (canceling.value) {
+              return;
+            }
+            canceling.value = true;
+            try {
+              await api(`/api/prompts/${selectedPrompt.value.prompt_id}/cancel`, {
+                method: 'POST',
+                body: JSON.stringify({ restart: false }),
+              });
+              if (!realtimeReady.value) {
+                await fetchPrompts({ silent: true });
+              }
+            } catch (error) {
+              alert(error.message || 'Unable to cancel prompt');
+            } finally {
+              canceling.value = false;
+            }
+          };
+
+          const cancelSelectedPrompt = () => performCancelAction();
+
+          const clearEditPromptState = () => {
+            editPromptDialogVisible.value = false;
+            editPromptText.value = '';
+            editPromptError.value = '';
+          };
+
+          const openEditPromptDialog = () => {
+            if (!canEditSelectedPrompt.value || !selectedPrompt.value) {
+              return;
+            }
+            editPromptText.value = selectedPrompt.value.text || '';
+            editPromptError.value = '';
+            editPromptDialogVisible.value = true;
+          };
+
+          const cancelEditPrompt = () => {
+            if (editPromptSaving.value) {
+              return;
+            }
+            clearEditPromptState();
+          };
+
+          const savePromptEdit = async () => {
+            if (!isAuthenticated.value || !canEditSelectedPrompt.value || !selectedPrompt.value) {
+              return;
+            }
+            const trimmed = editPromptText.value.trim();
+            if (!trimmed) {
+              editPromptError.value = 'Prompt text is required';
+              return;
+            }
+            editPromptSaving.value = true;
+            editPromptError.value = '';
+            try {
+              const response = await api(`/api/prompts/${selectedPrompt.value.prompt_id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ prompt: trimmed }),
+              });
+              const updated = response?.prompt;
+              if (updated && updated.prompt_id === selectedPrompt.value.prompt_id) {
+                selectedPrompt.value = { ...selectedPrompt.value, ...updated };
+              } else {
+                selectedPrompt.value = { ...(selectedPrompt.value || {}), text: trimmed };
+              }
+              const queueIndex = queue.value.findIndex(
+                (entry) => entry.prompt_id === selectedPrompt.value?.prompt_id
+              );
+              if (queueIndex !== -1) {
+                const replacement = { ...queue.value[queueIndex], text: trimmed };
+                queue.value.splice(queueIndex, 1, replacement);
+              }
+              if (!realtimeReady.value) {
+                await fetchPrompts({ silent: true });
+              }
+              clearEditPromptState();
+            } catch (error) {
+              editPromptError.value = error.message || 'Unable to update prompt';
+            } finally {
+              editPromptSaving.value = false;
+            }
+          };
+
+          const deleteSelectedPrompt = async () => {
+            if (!isAuthenticated.value || !canDeleteSelectedPrompt.value || !selectedPrompt.value) {
+              return;
+            }
+            if (deletePromptLoading.value) {
+              return;
+            }
+            const confirmed =
+              typeof window === 'undefined' ? true : window.confirm('Delete this queued prompt?');
+            if (!confirmed) {
+              return;
+            }
+            const promptId = selectedPrompt.value.prompt_id;
+            deletePromptLoading.value = true;
+            try {
+              await api(`/api/prompts/${promptId}`, { method: 'DELETE' });
+              const index = queue.value.findIndex((entry) => entry.prompt_id === promptId);
+              if (index !== -1) {
+                queue.value.splice(index, 1);
+              }
+              clearStreamState(promptId);
+              selectedPrompt.value = null;
+              router.replace({ name: 'queue' }).catch(() => {});
+              if (!realtimeReady.value) {
+                await fetchPrompts({ silent: true });
+              }
+            } catch (error) {
+              alert(error.message || 'Unable to delete prompt');
+            } finally {
+              deletePromptLoading.value = false;
+            }
+          };
+
+          const login = async () => {
+            const email = loginEmail.value.trim();
+            if (loginLoading.value) {
+              return;
+            }
+            if (!email || !loginPassword.value) {
+              loginError.value = 'Email and password are required';
+              return;
+            }
+            loginLoading.value = true;
+            loginError.value = '';
+            try {
+              const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password: loginPassword.value }),
+              });
+              const payload = await response.json().catch(() => ({}));
+              if (!response.ok) {
+                throw new Error(payload.error || 'Unable to sign in');
+              }
+              if (!payload.token) {
+                throw new Error('Login response missing token');
+              }
+              authToken.value = payload.token;
+              currentUser.value = payload.user || { email };
+              loginPassword.value = '';
+              persistToken(payload.token);
+              connectRealtime();
+              await fetchPrompts();
+              await fetchHealth();
+            } catch (error) {
+              handleUnauthorized();
+              loginError.value = error.message || 'Unable to sign in';
+            } finally {
+              loginLoading.value = false;
+            }
+          };
+
+          const togglePasswordVisibility = () => {
+            showPassword.value = !showPassword.value;
+          };
+
+          const logout = () => {
+            handleUnauthorized();
+            loginPassword.value = '';
+            loginError.value = '';
+          };
+
+          const applyTheme = (mode) => {
+            themeMode.value = mode;
+            theme.global.name.value = mode;
+            if (typeof document !== 'undefined') {
+              document.documentElement.setAttribute('data-theme', mode);
+            }
+            if (typeof window !== 'undefined' && window.localStorage) {
+              try {
+                window.localStorage.setItem(THEME_STORAGE_KEY, mode);
+              } catch (error) {
+                console.warn('Unable to persist theme preference', error);
+              }
+            }
+          };
+
+          const initTheme = () => {
+            let preferred = themeMode.value;
+            if (typeof window !== 'undefined' && window.localStorage) {
+              try {
+                const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+                if (stored === 'light' || stored === 'dark') {
+                  preferred = stored;
+                }
+              } catch (error) {
+                console.warn('Unable to read stored theme preference', error);
+              }
+            }
+            applyTheme(preferred);
+          };
+
+          const toggleTheme = () => {
+            const next = themeMode.value === 'dark' ? 'light' : 'dark';
+            applyTheme(next);
+          };
+
+          onMounted(async () => {
+            initTheme();
+            if (typeof window !== 'undefined') {
+              window.addEventListener('resize', handleWindowResize);
+            }
+            if (typeof window !== 'undefined' && window.localStorage) {
+              try {
+                const storedToken = window.localStorage.getItem(AUTH_TOKEN_KEY);
+                if (storedToken) {
+                  authToken.value = storedToken;
+                  connectRealtime();
+                  await fetchPrompts({ silent: true });
+                  await fetchHealth();
+                  loading.value = false;
+                  return;
+                }
+              } catch (error) {
+                console.warn('Unable to restore auth token', error);
+              }
+            }
+            loading.value = false;
+          });
+
+          onUnmounted(() => {
+            disconnectRealtime({ manual: true });
+            stopLogRefresh();
+            if (chatThreadResizeObserver) {
+              chatThreadResizeObserver.disconnect();
+              chatThreadResizeObserver = null;
+            }
+            if (typeof window !== 'undefined') {
+              window.removeEventListener('resize', handleWindowResize);
+            }
+          });
+
+          return {
+            promptText,
+            queue,
+            queueEntries,
+            canEditSelectedPrompt,
+            canDeleteSelectedPrompt,
+            canRestartSelectedPrompt,
+            selectedPrompt,
+            loading,
+            submitting,
+            health,
+            retrying,
+            canceling,
+            restarting,
+            deletePromptLoading,
+            formatDate,
+            submitPrompt,
+            selectPrompt,
+            retryPrompt,
+            canCancelSelectedPrompt,
+            cancelSelectedPrompt,
+            restartSelectedPrompt,
+            deleteSelectedPrompt,
+            copyToClipboard,
+            attemptLogs,
+            attemptKey,
+            globalContext,
+            activeStream,
+            showLiveStream,
+            liveAttemptNumber,
+            liveAttemptReceivedAt,
+            liveAttemptDurationSeconds,
+            activeView,
+            openSettingsView,
+            returnToQueueView,
+            goHome,
+            passwordForm,
+            passwordChangeLoading,
+            passwordChangeError,
+            passwordChangeSuccess,
+            sshKeys,
+            sshKeysLoading,
+            sshKeysError,
+            sshKeysLastFetched,
+            canSubmitPassword,
+            changePassword,
+            fetchSshKeys,
+            themeMode,
+            toggleTheme,
+            chatThreadRef,
+            liveStreamScrollRef,
+            formatTimestamp,
+            formatDuration,
+            formatStatus,
+            handleComposerKeydown,
+            isAuthenticated,
+            loginEmail,
+            loginPassword,
+            showPassword,
+            togglePasswordVisibility,
+            loginLoading,
+            loginError,
+            login,
+            logout,
+            currentUser,
+            wsStatus,
+            operationsLog,
+            logLoading,
+            logError,
+            logLastUpdated,
+            refreshProgressLog,
+            parseOutputSegments,
+            editPromptDialogVisible,
+            editPromptText,
+            editPromptError,
+            editPromptSaving,
+            openEditPromptDialog,
+            cancelEditPrompt,
+            savePromptEdit,
+          };
+        },
+        template: `
+          <v-app>
+            <v-dialog v-model="editPromptDialogVisible" max-width="640">
+              <v-card>
+                <v-card-title>Edit Prompt</v-card-title>
+                <v-card-text>
+                  <p class="text-body-2 text-medium-emphasis mb-3">
+                    Update the queued prompt before Codex begins processing it.
+                  </p>
+                  <v-alert v-if="editPromptError" type="error" variant="tonal" class="mb-3">
+                    {{ editPromptError }}
+                  </v-alert>
+                  <v-textarea
+                    v-model="editPromptText"
+                    variant="outlined"
+                    rows="4"
+                    auto-grow
+                    hide-details
+                    placeholder="Revise the queued prompt text"
+                  />
+                </v-card-text>
+                <v-card-actions>
+                  <v-spacer />
+                  <v-btn variant="text" :disabled="editPromptSaving" @click="cancelEditPrompt">Cancel</v-btn>
+                  <v-btn
+                    color="primary"
+                    :loading="editPromptSaving"
+                    :disabled="editPromptSaving || !editPromptText.trim()"
+                    @click="savePromptEdit"
+                  >
+                    Save
+                  </v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-dialog>
+              <v-app-bar class="global-header" flat>
+                <v-app-bar-title>
+                  <button type="button" class="global-header__home-link" @click="goHome">
+                    Agent Dev Host
+                  </button>
+                </v-app-bar-title>
+                <v-spacer />
+                <div v-if="isAuthenticated" class="user-summary mr-4">
+                  <v-menu location="bottom end" transition="scale-transition">
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        variant="text"
+                        class="user-menu__activator"
+                        density="comfortable"
+                      >
+                        <span class="user-summary__email">
+                          {{ (currentUser && (currentUser.name || currentUser.email)) || 'Signed in' }}
+                        </span>
+                        <span class="mdi mdi-menu-down" aria-hidden="true"></span>
+                      </v-btn>
+                    </template>
+                    <v-card class="user-menu-card" elevation="8">
+                      <v-list density="compact">
+                        <v-list-item class="queue-menu-item" @click="goHome">
+                          <template #prepend>
+                            <span class="user-menu-icon mdi mdi-view-list" aria-hidden="true"></span>
+                          </template>
+                          <v-list-item-title>Prompt queue</v-list-item-title>
+                        </v-list-item>
+                        <v-list-item class="settings-menu-item" @click="openSettingsView">
+                          <template #prepend>
+                            <span class="user-menu-icon mdi mdi-account-cog" aria-hidden="true"></span>
+                          </template>
+                          <v-list-item-title>Settings</v-list-item-title>
+                        </v-list-item>
+                        <v-divider class="my-1" />
+                        <v-list-item class="logout-list-item" @click="logout">
+                          <template #prepend>
+                            <span class="user-menu-icon mdi mdi-logout" aria-hidden="true"></span>
+                          </template>
+                          <v-list-item-title>Sign out</v-list-item-title>
+                          <template #append>
+                            <button
+                              class="theme-toggle logout-theme-toggle"
+                              type="button"
+                              role="switch"
+                              :aria-checked="themeMode === 'dark'"
+                              :aria-label="themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+                              @click.stop="toggleTheme"
+                              @keydown.enter.prevent.stop="toggleTheme"
+                              @keydown.space.prevent.stop="toggleTheme"
+                            >
+                              <span class="theme-toggle__icon mdi mdi-white-balance-sunny" aria-hidden="true"></span>
+                              <span class="theme-toggle__icon mdi mdi-weather-night" aria-hidden="true"></span>
+                              <span class="theme-toggle__thumb" :class="{ 'theme-toggle__thumb--right': themeMode === 'dark' }">
+                                <span
+                                  :class="['mdi', themeMode === 'dark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny']"
+                                  aria-hidden="true"
+                                ></span>
+                              </span>
+                            </button>
+                          </template>
+                        </v-list-item>
+                      </v-list>
+                    </v-card>
+                  </v-menu>
+                </div>
+                <template v-else>
+                  <button
+                    class="theme-toggle ml-3 header-theme-toggle"
+                    type="button"
+                    role="switch"
+                    :aria-checked="themeMode === 'dark'"
+                    :aria-label="themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+                    @click="toggleTheme"
+                    @keydown.enter.prevent="toggleTheme"
+                    @keydown.space.prevent="toggleTheme"
+                  >
+                    <span class="theme-toggle__icon mdi mdi-white-balance-sunny" aria-hidden="true"></span>
+                    <span class="theme-toggle__icon mdi mdi-weather-night" aria-hidden="true"></span>
+                    <span class="theme-toggle__thumb" :class="{ 'theme-toggle__thumb--right': themeMode === 'dark' }">
+                      <span
+                        :class="['mdi', themeMode === 'dark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny']"
+                        aria-hidden="true"
+                      ></span>
+                    </span>
+                  </button>
+                </template>
+            </v-app-bar>
+            <v-main>
+              <v-container v-if="!isAuthenticated" class="login-container" fluid>
+                <div class="login-wrapper">
+                  <v-card elevation="0" class="panel-card login-card">
+                    <v-card-title>Sign In</v-card-title>
+                    <v-card-text>
+                      <p class="text-body-2 text-medium-emphasis mb-4">
+                        Use your email credentials to access the prompt queue.
+                      </p>
+                      <v-alert
+                        v-if="loginError"
+                        type="error"
+                        variant="tonal"
+                        border="start"
+                        density="comfortable"
+                        class="mb-4"
+                      >
+                        {{ loginError }}
+                      </v-alert>
+                      <v-text-field
+                        v-model="loginEmail"
+                        label="Email"
+                        type="email"
+                        autocomplete="email"
+                        prepend-inner-icon="mdi-email"
+                        variant="outlined"
+                        density="comfortable"
+                        hide-details="auto"
+                      />
+                      <v-text-field
+                        v-model="loginPassword"
+                        label="Password"
+                        :type="showPassword ? 'text' : 'password'"
+                        autocomplete="current-password"
+                        prepend-inner-icon="mdi-lock"
+                        :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+                        @click:append-inner="togglePasswordVisibility"
+                        variant="outlined"
+                        density="comfortable"
+                        hide-details="auto"
+                        @keydown.enter.prevent="login"
+                      />
+                    </v-card-text>
+                    <v-card-actions>
+                      <v-spacer />
+                      <v-btn
+                        color="primary"
+                        :loading="loginLoading"
+                        :disabled="!loginEmail || !loginPassword"
+                        @click="login"
+                      >
+                        Sign In
+                      </v-btn>
+                    </v-card-actions>
+                  </v-card>
+                </div>
+              </v-container>
+              <v-container v-else-if="activeView === 'settings'" class="py-6 main-layout" fluid>
+                <v-row class="settings-row" justify="center">
+                  <v-col cols="12" md="5" lg="4">
+                    <v-card elevation="0" class="panel-card">
+                      <v-card-title class="d-flex align-center">
+                        <div>
+                          <div class="text-h6">Settings</div>
+                          <div class="text-caption text-medium-emphasis">
+                            Manage your account preferences.
+                          </div>
+                        </div>
+                      </v-card-title>
+                      <v-divider />
+                      <v-card-text>
+                        <p class="text-body-2 text-medium-emphasis mb-4">
+                          Change the password for {{ currentUser ? currentUser.email : 'your account' }}.
+                        </p>
+                        <v-alert
+                          v-if="passwordChangeError"
+                          type="error"
+                          variant="tonal"
+                          border="start"
+                          density="comfortable"
+                          class="mb-4"
+                        >
+                          {{ passwordChangeError }}
+                        </v-alert>
+                        <v-alert
+                          v-if="passwordChangeSuccess"
+                          type="success"
+                          variant="tonal"
+                          border="start"
+                          density="comfortable"
+                          class="mb-4"
+                        >
+                          {{ passwordChangeSuccess }}
+                        </v-alert>
+                        <v-text-field
+                          v-model="passwordForm.current"
+                          label="Current password"
+                          type="password"
+                          autocomplete="current-password"
+                          prepend-inner-icon="mdi-lock"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details="auto"
+                          class="mb-3"
+                        />
+                        <v-text-field
+                          v-model="passwordForm.newValue"
+                          label="New password"
+                          type="password"
+                          autocomplete="new-password"
+                          prepend-inner-icon="mdi-lock-check"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details="auto"
+                          class="mb-3"
+                        />
+                        <v-text-field
+                          v-model="passwordForm.confirm"
+                          label="Confirm new password"
+                          type="password"
+                          autocomplete="new-password"
+                          prepend-inner-icon="mdi-lock-reset"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details="auto"
+                        />
+                      </v-card-text>
+                      <v-card-actions>
+                        <v-spacer />
+                        <v-btn
+                          color="primary"
+                          :loading="passwordChangeLoading"
+                          :disabled="!canSubmitPassword || passwordChangeLoading"
+                          @click="changePassword"
+                        >
+                          Update password
+                        </v-btn>
+                      </v-card-actions>
+                      <v-divider class="mx-4" />
+                      <v-card-text>
+                        <div class="d-flex align-center mb-2">
+                          <div>
+                            <div class="text-subtitle-1">SSH Public Keys</div>
+                            <div class="text-body-2 text-medium-emphasis">
+                              Add these keys to GitHub or any other git hosting service.
+                            </div>
+                          </div>
+                          <v-spacer />
+                          <v-btn
+                            variant="text"
+                            size="small"
+                            :loading="sshKeysLoading"
+                            :disabled="sshKeysLoading"
+                            icon="mdi-refresh"
+                            @click="fetchSshKeys"
+                            :aria-label="sshKeysLoading ? 'Refreshing keys' : 'Refresh keys'"
+                          ></v-btn>
+                        </div>
+                        <div class="text-caption text-medium-emphasis mb-4" v-if="sshKeysLastFetched">
+                          Last refreshed {{ formatTimestamp(sshKeysLastFetched) }}
+                        </div>
+                        <v-alert
+                          v-if="sshKeysError"
+                          type="error"
+                          variant="tonal"
+                          border="start"
+                          density="comfortable"
+                          class="mb-4"
+                        >
+                          {{ sshKeysError }}
+                        </v-alert>
+                        <v-skeleton-loader
+                          v-if="sshKeysLoading && !sshKeys.length && !sshKeysError"
+                          type="list-item-two-line@2"
+                        />
+                        <div v-else class="ssh-key-list">
+                          <div v-if="!sshKeys.length" class="text-body-2 text-medium-emphasis">
+                            No SSH keys are available yet.
+                          </div>
+                          <v-sheet
+                            v-for="key in sshKeys"
+                            :key="key.name"
+                            class="ssh-key-item"
+                            color="transparent"
+                            elevation="0"
+                          >
+                            <div class="ssh-key-header">
+                              <div class="font-weight-medium">{{ key.name }}</div>
+                              <v-chip size="x-small" label>{{ key.type }}</v-chip>
+                              <v-chip v-if="key.fingerprint" size="x-small" variant="tonal">
+                                {{ key.fingerprint }}
+                              </v-chip>
+                              <v-spacer />
+                              <v-btn
+                                variant="text"
+                                size="small"
+                                prepend-icon="mdi-content-copy"
+                                @click="copyToClipboard(key.public_key)"
+                              >
+                                Copy
+                              </v-btn>
+                            </div>
+                            <pre class="ssh-key-text">{{ key.public_key }}</pre>
+                          </v-sheet>
+                        </div>
+                      </v-card-text>
+                    </v-card>
+                  </v-col>
+                  <v-col cols="12" md="7" lg="8">
+                    <v-card elevation="0" class="panel-card log-card settings-log-card">
+                      <v-card-title class="log-card__header">
+                        <div>
+                          <div class="text-h6">Operations Log</div>
+                          <div class="text-caption text-medium-emphasis">
+                            {{ logLastUpdated ? 'Updated · ' + formatTimestamp(logLastUpdated) : 'Not refreshed yet' }}
+                          </div>
+                        </div>
+                        <div class="log-card__actions">
+                          <v-btn
+                            icon="mdi-refresh"
+                            variant="text"
+                            :loading="logLoading"
+                            :disabled="logLoading"
+                            @click="refreshProgressLog"
+                            aria-label="Refresh operations log"
+                          ></v-btn>
+                        </div>
+                      </v-card-title>
+                      <v-divider />
+                      <v-card-text class="log-card__body">
+                        <v-alert
+                          v-if="logError"
+                          type="error"
+                          variant="tonal"
+                          density="comfortable"
+                          border="start"
+                          class="mb-3"
+                        >
+                          {{ logError }}
+                        </v-alert>
+                        <v-skeleton-loader v-if="logLoading && !operationsLog" type="paragraph@3" />
+                        <div v-else class="log-content" :class="{ 'log-content--empty': !operationsLog }">
+                          <pre v-if="operationsLog">{{ operationsLog }}</pre>
+                          <span v-else class="log-content__placeholder">
+                            No entries in progress log yet.
+                          </span>
+                        </div>
+                      </v-card-text>
+                    </v-card>
+                  </v-col>
+                </v-row>
+              </v-container>
+              <v-container v-else class="py-6 main-layout" fluid>
+                <v-row class="main-row">
+                  <v-col cols="12" md="4" class="d-flex flex-column">
+                    <v-card elevation="0" class="panel-card queue-card">
+                      <v-card-title class="queue-card-title">
+                        <span>Prompt Queue</span>
+                        <v-spacer />
+                        <v-chip
+                          class="realtime-chip"
+                          size="small"
+                          label
+                          :color="wsStatus === 'open' ? 'success' : wsStatus === 'connecting' ? 'warning' : 'error'"
+                          variant="tonal"
+                        >
+                          Realtime · {{ formatStatus(wsStatus) }}
+                        </v-chip>
+                      </v-card-title>
+                      <v-divider />
+                      <div class="queue-composer">
+                        <v-textarea
+                          v-model="promptText"
+                          placeholder="Type your next instruction to Codex"
+                          variant="outlined"
+                          auto-grow
+                          rows="3"
+                          hide-details
+                          @keydown.enter="handleComposerKeydown"
+                        />
+                        <div class="composer-actions">
+                          <div class="text-caption text-medium-emphasis" v-if="health">
+                            Last health check {{ formatDate(health.timestamp) }}
+                          </div>
+                          <v-btn
+                            color="primary"
+                            :loading="submitting"
+                            :disabled="!promptText.trim()"
+                            @click="submitPrompt"
+                          >
+                            Send
+                          </v-btn>
+                        </div>
+                      </div>
+                      <v-divider />
+                      <v-card-text class="queue-scroll">
+                        <v-skeleton-loader v-if="loading" type="list-item@4" />
+                        <div v-else class="queue-list">
+                          <button
+                            v-for="entry in queueEntries"
+                            :key="entry.prompt_id"
+                            type="button"
+                            class="queue-entry"
+                            :class="{ active: selectedPrompt && selectedPrompt.prompt_id === entry.prompt_id }"
+                            @click="selectPrompt(entry)"
+                          >
+                            <div class="queue-entry-header">
+                              <span class="queue-entry-index">#{{ entry.queueIndex }}</span>
+                              <span
+                                class="queue-entry-status"
+                                :class="'status-' + ((entry.status || '').toLowerCase())"
+                              >
+                                {{ formatStatus(entry.status) }}
+                              </span>
+                              <span class="queue-entry-created">{{ entry.createdDisplay }}</span>
+                              <span class="queue-entry-runtime">Time {{ entry.runtimeDisplay || '—' }}</span>
+                            </div>
+                            <div class="queue-entry-detail">
+                              {{ entry.detailLine }}
+                            </div>
+                          </button>
+                          <div v-if="!queueEntries.length" class="text-center text-medium-emphasis py-6">
+                            No prompts yet — type a prompt above.
+                          </div>
+                        </div>
+                      </v-card-text>
+                    </v-card>
+                  </v-col>
+                  <v-col cols="12" md="8" class="d-flex flex-column">
+                    <v-card elevation="0" class="panel-card chat-card">
+                      <v-card-title class="justify-space-between align-start">
+                        <div>
+                          <div class="chat-card-title__heading">Codex Run Output</div>
+                          <div class="text-caption text-medium-emphasis" v-if="selectedPrompt">
+                            Prompt {{ selectedPrompt.prompt_id }} · Attempts {{ selectedPrompt.attempts || 0 }}
+                          </div>
+                          <div class="text-caption text-medium-emphasis" v-else>
+                            Select a prompt from the queue to review Codex output.
+                          </div>
+                        </div>
+                        <div class="thread-header__actions">
+                          <v-btn
+                            v-if="canCancelSelectedPrompt"
+                            color="warning"
+                            variant="outlined"
+                            size="small"
+                            :loading="canceling"
+                            :disabled="canceling"
+                            @click="cancelSelectedPrompt"
+                          >
+                            Cancel
+                          </v-btn>
+                          <v-btn
+                            v-if="canRestartSelectedPrompt"
+                            color="warning"
+                            variant="tonal"
+                            size="small"
+                            :loading="restarting"
+                            :disabled="restarting"
+                            @click="restartSelectedPrompt"
+                          >
+                            Restart
+                          </v-btn>
+                          <v-btn
+                            v-if="canDeleteSelectedPrompt"
+                            color="error"
+                            variant="outlined"
+                            size="small"
+                            :loading="deletePromptLoading"
+                            @click="deleteSelectedPrompt"
+                          >
+                            Delete
+                          </v-btn>
+                          <v-btn
+                            v-if="selectedPrompt && selectedPrompt.status === 'failed'"
+                            color="warning"
+                            variant="tonal"
+                            size="small"
+                            :loading="retrying"
+                            @click="retryPrompt"
+                          >
+                            Retry
+                          </v-btn>
+                        </div>
+                      </v-card-title>
+                      <v-divider />
+                      <div ref="chatThreadRef" class="chat-thread">
+                        <div v-if="!selectedPrompt" class="text-medium-emphasis text-center py-10">
+                          Waiting for a prompt selection...
+                        </div>
+                        <template v-else>
+                          <div class="chat-message user">
+                            <div class="message-meta message-meta--header">
+                              <span>Your prompt</span>
+                              <span v-if="selectedPrompt.created_at">
+                                Submitted · {{ formatTimestamp(selectedPrompt.created_at) }}
+                              </span>
+                            </div>
+                            <details class="detail-panel">
+                              <summary>
+                                <span>Context</span>
+                                <button
+                                  type="button"
+                                  class="copy-button"
+                                  aria-label="Copy context"
+                                  title="Copy context"
+                                  @click.stop.prevent="copyToClipboard(globalContext || '')"
+                                >
+                                  <span class="mdi mdi-content-copy" aria-hidden="true"></span>
+                                </button>
+                              </summary>
+                              <div class="detail-content context-block">
+                                {{ globalContext || 'No context recorded for this prompt.' }}
+                              </div>
+                            </details>
+                            <div class="chat-bubble prompt copyable">
+                              <div class="prompt-bubble-actions">
+                                <button
+                                  type="button"
+                                  class="copy-button"
+                                  aria-label="Copy prompt text"
+                                  title="Copy prompt text"
+                                  @click.stop="copyToClipboard(selectedPrompt.text || '')"
+                                >
+                                  <span class="mdi mdi-content-copy" aria-hidden="true"></span>
+                                </button>
+                                <button
+                                  v-if="canEditSelectedPrompt"
+                                  type="button"
+                                  class="copy-button prompt-edit-button"
+                                  aria-label="Edit queued prompt"
+                                  title="Edit queued prompt"
+                                  @click.stop="openEditPromptDialog"
+                                >
+                                  <span class="mdi mdi-pencil" aria-hidden="true"></span>
+                                </button>
+                              </div>
+                              <div class="prompt-text">
+                                {{ selectedPrompt.text || 'Prompt text unavailable.' }}
+                              </div>
+                            </div>
+                          </div>
+                          <div v-if="showLiveStream">
+                            <div class="chat-message codex">
+                              <div class="message-meta message-meta--header">
+                                <span>Attempt {{ liveAttemptNumber || 'Live' }}</span>
+                                <span>Status · {{ formatStatus(selectedPrompt.status) }}</span>
+                                <span v-if="liveAttemptReceivedAt">
+                                  Received · {{ formatTimestamp(liveAttemptReceivedAt) }}
+                                </span>
+                                <span v-if="liveAttemptDurationSeconds != null">
+                                  Time · {{ formatDuration(liveAttemptDurationSeconds) }}
+                                </span>
+                              </div>
+                              <details v-if="activeStream.stderr" class="detail-panel" open>
+                                <summary>
+                                  <span>Output</span>
+                                  <button
+                                    type="button"
+                                    class="copy-button"
+                                    aria-label="Copy live stderr"
+                                    title="Copy live stderr"
+                                    @click.stop.prevent="copyToClipboard(activeStream.stderr || '')"
+                                  >
+                                    <span class="mdi mdi-content-copy" aria-hidden="true"></span>
+                                  </button>
+                                </summary>
+                                <div class="detail-content stderr-block" ref="liveStreamScrollRef">
+                                  <template v-for="(segment, segIndex) in parseOutputSegments(activeStream.stderr)">
+                                    <div
+                                      v-if="segment.type === 'text'"
+                                      class="stderr-segment"
+                                      :key="'live-stderr-' + segIndex"
+                                    >
+                                      {{ segment.content }}
+                                    </div>
+                                    <details
+                                      v-else-if="segment.type === 'code'"
+                                      class="stderr-code-block"
+                                      :key="'live-stderr-code-' + segIndex"
+                                    >
+                                      <summary class="stderr-code-summary">
+                                        <span class="stderr-code-summary__label">
+                                          {{ segment.language ? segment.language + ' Code' : 'Code block' }}
+                                        </span>
+                                        <span class="stderr-code-summary__preview">
+                                          {{ segment.preview }}
+                                        </span>
+                                      </summary>
+                                      <pre class="stderr-code-content">{{ segment.content }}</pre>
+                                    </details>
+                                    <details
+                                      v-else-if="segment.type === 'exec' || segment.type === 'file-update'"
+                                      class="stderr-exec-block"
+                                      :key="'live-stderr-collapse-' + segment.type + '-' + segIndex"
+                                    >
+                                      <summary class="stderr-code-summary">
+                                        <span class="stderr-code-summary__label">
+                                          {{ segment.type === 'file-update' ? 'File update' : 'Command output' }}
+                                        </span>
+                                        <span class="stderr-code-summary__preview">
+                                          {{ segment.preview }}
+                                        </span>
+                                      </summary>
+                                      <pre class="stderr-code-content">{{ segment.content }}</pre>
+                                    </details>
+                                  </template>
+                                </div>
+                              </details>
+                            </div>
+                          </div>
+                          <div v-if="attemptLogs.length">
+                            <div
+                              v-for="(attempt, index) in attemptLogs"
+                              :key="attemptKey(attempt, index)"
+                              class="attempt-entry"
+                            >
+                              <div class="chat-message codex">
+                                <div class="message-meta message-meta--header">
+                                  <span>Attempt {{ index + 1 }}</span>
+                                  <span>Status · {{ formatStatus(attempt.status || selectedPrompt.status) }}</span>
+                                  <span>
+                                    Received · {{ formatTimestamp(attempt.received_at || selectedPrompt.created_at) }}
+                                  </span>
+                                  <span>Time · {{ formatDuration(attempt.duration_seconds) }}</span>
+                                </div>
+                                <details v-if="attempt.stderr" class="detail-panel">
+                                  <summary>
+                                    <span>Output</span>
+                                    <button
+                                      type="button"
+                                      class="copy-button"
+                                      aria-label="Copy output"
+                                      title="Copy output"
+                                      @click.stop.prevent="copyToClipboard(attempt.stderr || '')"
+                                    >
+                                      <span class="mdi mdi-content-copy" aria-hidden="true"></span>
+                                    </button>
+                                  </summary>
+                                  <div class="detail-content stderr-block">
+                                    <template v-for="(segment, segIndex) in parseOutputSegments(attempt.stderr)">
+                                      <div
+                                        v-if="segment.type === 'text'"
+                                        class="stderr-segment"
+                                        :key="attemptKey(attempt, index) + '-stderr-text-' + segIndex"
+                                      >
+                                        {{ segment.content }}
+                                      </div>
+                                      <details
+                                        v-else-if="segment.type === 'code'"
+                                        class="stderr-code-block"
+                                        :key="attemptKey(attempt, index) + '-stderr-code-' + segIndex"
+                                      >
+                                        <summary class="stderr-code-summary">
+                                          <span class="stderr-code-summary__label">
+                                            {{ segment.language ? segment.language + ' Code' : 'Code block' }}
+                                          </span>
+                                          <span class="stderr-code-summary__preview">
+                                            {{ segment.preview }}
+                                          </span>
+                                        </summary>
+                                        <pre class="stderr-code-content">{{ segment.content }}</pre>
+                                      </details>
+                                    <details
+                                      v-else-if="segment.type === 'exec' || segment.type === 'file-update'"
+                                      class="stderr-exec-block"
+                                      :key="attemptKey(attempt, index) + '-stderr-collapse-' + segment.type + '-' + segIndex"
+                                    >
+                                      <summary class="stderr-code-summary">
+                                        <span class="stderr-code-summary__label">
+                                          {{ segment.type === 'file-update' ? 'File update' : 'Command output' }}
+                                        </span>
+                                        <span class="stderr-code-summary__preview">
+                                          {{ segment.preview }}
+                                        </span>
+                                      </summary>
+                                      <pre class="stderr-code-content">{{ segment.content }}</pre>
+                                      </details>
+                                    </template>
+                                  </div>
+                                </details>
+                                <div class="chat-bubble response copyable">
+                                  <button
+                                    type="button"
+                                    class="copy-button copy-button--floating"
+                                    aria-label="Copy reply body"
+                                    title="Copy reply body"
+                                    @click.stop="copyToClipboard(attempt.stdout || attempt.summary || '')"
+                                  >
+                                    <span class="mdi mdi-content-copy" aria-hidden="true"></span>
+                                  </button>
+                                  <div :class="['stdout-block', { 'stdout-empty': !attempt.stdout }]">
+                                    {{ attempt.stdout || attempt.summary || 'No stdout recorded yet.' }}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div v-else-if="!showLiveStream" class="text-medium-emphasis text-center py-10">
+                            No Codex output captured for this prompt yet.
+                          </div>
+                        </template>
+                      </div>
+                      <div v-if="selectedPrompt" class="detail-footer">
+                        <span>Created {{ formatDate(selectedPrompt.created_at) }}</span>
+                        <span>Updated {{ formatDate(selectedPrompt.updated_at) }}</span>
+                        <span>Status {{ selectedPrompt.status }}</span>
+                      </div>
+                    </v-card>
+                  </v-col>
+                </v-row>
+              </v-container>
+            </v-main>
+            <router-view style="display: none;"></router-view>
+          </v-app>
+        `,
+      })
+        .use(vuetify)
+        .use(appRouter)
+        .mount('#app');
+    </script>
+  </body>
+</html>
