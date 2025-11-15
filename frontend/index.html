@@ -174,13 +174,22 @@
         min-height: 56px;
       }
 
-      .chat-card__header > :first-child {
+      .chat-card__header-main {
         flex: 1 1 auto;
         min-width: 0;
       }
 
       .chat-card__header .thread-header__actions {
         flex: 0 0 auto;
+      }
+
+      .mobile-thread-nav,
+      .mobile-panel-controls {
+        display: none;
+      }
+
+      .mobile-thread-back {
+        text-transform: none;
       }
 
       @media (max-width: 640px) {
@@ -193,6 +202,29 @@
         .chat-card__header .thread-header__actions {
           width: 100%;
           justify-content: flex-start;
+        }
+      }
+
+      @media (max-width: 959px) {
+        .mobile-panel-controls {
+          display: flex;
+          width: 100%;
+          justify-content: flex-end;
+          padding: 0.5rem 1.5rem 0;
+        }
+
+        .mobile-panel-controls .v-btn {
+          text-transform: none;
+        }
+
+        .mobile-thread-nav {
+          display: flex;
+          width: 100%;
+          margin-bottom: 0.25rem;
+        }
+
+        .mobile-thread-back {
+          padding-left: 0;
         }
       }
 
@@ -398,6 +430,22 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+
+      @media (max-width: 959px) {
+        .queue-card {
+          max-height: min(75vh, 640px);
+          flex: 0 0 auto;
+        }
+
+        .queue-entry-detail {
+          white-space: normal;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          line-clamp: 2;
+          word-break: break-word;
+        }
       }
 
 
@@ -982,11 +1030,13 @@
       const AUTH_TOKEN_KEY = 'codex-auth-token';
       const PROJECT_STORAGE_KEY = 'codex-active-project';
       const QUEUE_DETAIL_MAX = 160;
+      const QUEUE_DETAIL_MOBILE_MAX = 96;
       const WS_RECONNECT_MIN_MS = 1000;
       const WS_RECONNECT_MAX_MS = 10000;
       const LOG_REFRESH_INTERVAL_MS = 30000;
       const PROMPT_AVERAGE_WINDOW = 20;
       const PROMPT_DURATION_STATUSES = new Set(['completed', 'failed', 'canceled']);
+      const MOBILE_BREAKPOINT = 960;
 
       const createApiClient = (getToken, onUnauthorized) => {
         return async (path, options = {}) => {
@@ -1129,6 +1179,9 @@
           const sshKeysError = ref('');
           const sshKeysLastFetched = ref('');
           const lastQueuePromptId = ref('');
+          const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : MOBILE_BREAKPOINT);
+          const activeMobilePanel = ref('queue');
+          const isMobileLayout = computed(() => viewportWidth.value < MOBILE_BREAKPOINT);
           const isAuthenticated = computed(() => Boolean(authToken.value));
           const resetPasswordForm = () => {
             passwordForm.current = '';
@@ -1190,6 +1243,18 @@
             }
           };
 
+          const showQueuePanel = () => {
+            if (isMobileLayout.value) {
+              activeMobilePanel.value = 'queue';
+            }
+          };
+
+          const showThreadPanel = () => {
+            if (isMobileLayout.value) {
+              activeMobilePanel.value = 'thread';
+            }
+          };
+
           watch(
             () => route.name,
             (name, previous) => {
@@ -1224,6 +1289,22 @@
               persistProjectSelection(value);
             }
           );
+
+          watch(isMobileLayout, (isMobile) => {
+            if (!isMobile) {
+              activeMobilePanel.value = 'queue';
+              return;
+            }
+            if (!selectedPrompt.value) {
+              activeMobilePanel.value = 'queue';
+            }
+          });
+
+          watch(selectedPrompt, (prompt) => {
+            if (!prompt && isMobileLayout.value) {
+              activeMobilePanel.value = 'queue';
+            }
+          });
 
           const persistToken = (token) => {
             if (typeof window === 'undefined' || !window.localStorage) {
@@ -2018,9 +2099,10 @@
                 : isCanceled
                   ? 'Prompt canceled'
                   : 'Prompt unavailable';
+              const detailLimit = isMobileLayout.value ? QUEUE_DETAIL_MOBILE_MAX : QUEUE_DETAIL_MAX;
               const detail =
-                normalizedDetail.length > QUEUE_DETAIL_MAX
-                  ? `${normalizedDetail.slice(0, QUEUE_DETAIL_MAX - 1)}…`
+                normalizedDetail.length > detailLimit
+                  ? `${normalizedDetail.slice(0, detailLimit - 1)}…`
                   : normalizedDetail || placeholder;
                 const entryProjectId = item.project?.id || item.project_id || null;
                 if (focusProjectId && entryProjectId !== focusProjectId) {
@@ -2115,8 +2197,13 @@
             chatThreadHeight.value = chatThreadRef.value?.clientHeight || 0;
           };
 
+          const updateViewportWidth = () => {
+            viewportWidth.value = typeof window !== 'undefined' ? window.innerWidth : viewportWidth.value;
+          };
+
           const handleWindowResize = () => {
             updateChatThreadHeight();
+             updateViewportWidth();
           };
 
           const scrollElementToBottom = (elementRef) => {
@@ -2489,6 +2576,9 @@
               router.replace({ name: 'queue', params: { promptId } }).catch(() => {});
             }
             await refreshSelectedPrompt(promptId);
+            if (isMobileLayout.value) {
+              activeMobilePanel.value = 'thread';
+            }
           };
 
           const queuePromptRetry = async (stateRef, errorMessage) => {
@@ -2731,6 +2821,7 @@
             initTheme();
             fetchProjects().catch(() => {});
             if (typeof window !== 'undefined') {
+              updateViewportWidth();
               window.addEventListener('resize', handleWindowResize);
             }
             if (typeof window !== 'undefined' && window.localStorage) {
@@ -2776,6 +2867,8 @@
             canDeleteSelectedPrompt,
             canRestartSelectedPrompt,
             selectedPrompt,
+            isMobileLayout,
+            activeMobilePanel,
             loading,
             submitting,
             health,
@@ -2806,6 +2899,8 @@
             returnToQueueView,
             goHome,
             openProject,
+            showQueuePanel,
+            showThreadPanel,
             passwordForm,
             passwordChangeLoading,
             passwordChangeError,
@@ -3277,7 +3372,12 @@
               </v-container>
               <v-container v-else class="py-6 main-layout" fluid>
                 <v-row class="main-row">
-                  <v-col cols="12" md="4" class="d-flex flex-column">
+                  <v-col
+                    v-if="!isMobileLayout || activeMobilePanel === 'queue'"
+                    cols="12"
+                    md="4"
+                    class="d-flex flex-column"
+                  >
                     <v-card elevation="0" class="panel-card queue-card">
                       <v-card-title class="queue-card-title">
                         <span>Prompt Queue</span>
@@ -3293,6 +3393,17 @@
                         </v-chip>
                       </v-card-title>
                       <v-divider />
+                      <div v-if="isMobileLayout" class="mobile-panel-controls">
+                        <v-btn
+                          variant="tonal"
+                          size="small"
+                          prepend-icon="mdi-forum"
+                          :disabled="!selectedPrompt"
+                          @click="showThreadPanel"
+                        >
+                          View task thread
+                        </v-btn>
+                      </div>
                       <div class="project-selector">
                         <v-select
                           v-model="selectedProjectId"
@@ -3372,10 +3483,26 @@
                       </v-card-text>
                     </v-card>
                   </v-col>
-                  <v-col cols="12" md="8" class="d-flex flex-column">
+                  <v-col
+                    v-if="!isMobileLayout || activeMobilePanel === 'thread'"
+                    cols="12"
+                    md="8"
+                    class="d-flex flex-column"
+                  >
                     <v-card elevation="0" class="panel-card chat-card">
                       <v-card-title class="chat-card__header justify-space-between align-start">
-                        <div>
+                        <div class="chat-card__header-main">
+                          <div class="mobile-thread-nav" v-if="isMobileLayout">
+                            <v-btn
+                              class="mobile-thread-back"
+                              variant="text"
+                              density="comfortable"
+                              prepend-icon="mdi-arrow-left"
+                              @click="showQueuePanel"
+                            >
+                              Back to queue
+                            </v-btn>
+                          </div>
                           <div class="chat-card-title__heading">
                             <span>Codex Task</span>
                             <span

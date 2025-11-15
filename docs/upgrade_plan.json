@@ -1,0 +1,53 @@
+{
+  "tasks": [
+    {
+      "id": "upgrade-queue-metrics",
+      "title": "Expose richer queue metrics across the stack",
+      "description": "Return per-status counts, oldest/newest timestamps, and rolling duration stats so the UI can visualize queue health trends.",
+      "prompt": "Enhance the backend /api/health endpoint to surface queue metrics (counts per status, pending/running identifiers, and oldest/newest timestamps) and update the frontend health card to chart those stats and flag stalls.",
+      "project_id": "agent-dev-host",
+      "priority": 1,
+      "status": "queued",
+      "queued_count": 1,
+      "last_prompt_id": "da053bd288674c19ad52592cb06c7a58",
+      "last_queued_at": "2025-11-15T06:42:37.495770+00:00"
+    },
+    {
+      "id": "upgrade-prompt-logs-cli",
+      "title": "Ship a CLI to inspect prompt logs quickly",
+      "description": "Operators often need to tail the last Codex attempt; provide a helper script to fetch + stream prompt logs without digging through files.",
+      "prompt": "Add a scripts/tail_prompt_log.py helper that lists prompts, accepts a prompt id, and tails its log (with optional follow mode) so operators can debug Codex runs from SSH.",
+      "project_id": "agent-dev-host",
+      "priority": 2,
+      "status": "queued",
+      "queued_count": 1,
+      "last_prompt_id": "02340ce106c54bfdabbadcc50fd3c0f1",
+      "last_queued_at": "2025-11-15T06:42:37.497161+00:00"
+    },
+    {
+      "id": "upgrade-frontend-filters",
+      "title": "Add filters and search to the queue UI",
+      "description": "Let users filter prompts by status/project/text and search the backlog without scrolling through hundreds of entries.",
+      "prompt": "Update the Vue/Vuetify frontend queue panel to support filtering by status, project, and free-text search, while persisting the last-used filters in localStorage.",
+      "project_id": "agent-dev-host",
+      "priority": 3,
+      "status": "queued",
+      "queued_count": 1,
+      "last_prompt_id": "87cdc9a0ffab4628a019ca681a942d41",
+      "last_queued_at": "2025-11-15T06:42:37.502451+00:00"
+    },
+    {
+      "id": "upgrade-log-retention",
+      "title": "Automate prompt log retention + archiving",
+      "description": "Large prompt histories fill the SD card; add a retention policy that archives or prunes log files + prompt records after configurable thresholds.",
+      "prompt": "Implement a retention job (CLI or background thread) that archives prompt logs older than N days to a tarball and truncates prompts.json accordingly, with config knobs and documentation.",
+      "project_id": "agent-dev-host",
+      "priority": 4,
+      "status": "queued",
+      "queued_count": 1,
+      "last_prompt_id": "1e3ad202aa8b40fc9744b658d87e6a10",
+      "last_queued_at": "2025-11-15T06:42:37.507402+00:00"
+    }
+  ],
+  "generated_at": "2025-11-15T06:41:06Z"
+}
