@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import socket
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -82,7 +82,7 @@ class StatusRenderer:
         return canvas
 
     # ----------------------------------------------------------------- helpers
-    def _format_entry(self, idx: int, record: Mapping[str, str], status: str) -> list[str]:
+    def _format_entry(self, idx: int, record: Mapping[str, Any], status: str) -> list[str]:
         status_label = {
             "queued": "PENDING",
             "running": "RUNNING",
@@ -95,6 +95,9 @@ class StatusRenderer:
         created_str = self._format_created_timestamp(created_at)
         runtime_str = runtime or "--:--"
         header = f"{idx:>2} | {status_label:<9} | {created_str:<16} | {runtime_str}"
+        project_label = self._extract_project_label(record)
+        if project_label:
+            header = f"{header} | {project_label}"
 
         is_completed = status == "completed"
         if is_completed:
@@ -157,6 +160,15 @@ class StatusRenderer:
 
         padded = [f"{self._detail_indent}{line}" if line else self._detail_indent for line in lines[:max_lines]]
         return padded
+
+    def _extract_project_label(self, record: Mapping[str, Any]) -> str:
+        project = record.get("project")
+        name = ""
+        if isinstance(project, Mapping):
+            name = (project.get("name") or project.get("id") or "").strip()
+        if not name:
+            name = (record.get("project_id") or "").strip()
+        return name
 
     def _clip_to_width(self, text: str, max_width: float, *, ellipsis: bool) -> str:
         if not text:

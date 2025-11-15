@@ -87,6 +87,7 @@ class ProjectDefinition:
     name: str
     description: str
     context_file: Path | None
+    guidance_file: Path | None
     launch_path: Optional[str] = None
     is_default: bool = False
 
@@ -95,6 +96,14 @@ class ProjectDefinition:
             return ""
         try:
             return self.context_file.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+
+    def read_guidance(self) -> str:
+        if not self.guidance_file:
+            return ""
+        try:
+            return self.guidance_file.read_text(encoding="utf-8")
         except OSError:
             return ""
 
@@ -134,6 +143,14 @@ class ProjectRegistry:
             description = (metadata.get("description") or "").strip()
             context_filename = (metadata.get("contextFile") or metadata.get("context_file") or "context.md").strip()
             context_path = directory / context_filename if context_filename else None
+            guidance_value = metadata.get("agentsFile") or metadata.get("guidanceFile") or metadata.get("agents_file")
+            guidance_path: Path | None
+            if guidance_value is not None:
+                trimmed = str(guidance_value).strip()
+                guidance_path = directory / trimmed if trimmed else None
+            else:
+                default_guidance = directory / "agents.md"
+                guidance_path = default_guidance if default_guidance.exists() else None
             launch_path = metadata.get("launchPath") or metadata.get("launch_path") or metadata.get("launchUrl")
             is_default = bool(metadata.get("default"))
             project = ProjectDefinition(
@@ -141,6 +158,7 @@ class ProjectRegistry:
                 name=name or project_id,
                 description=description,
                 context_file=context_path,
+                guidance_file=guidance_path,
                 launch_path=launch_path,
                 is_default=is_default,
             )
@@ -185,12 +203,15 @@ class ProjectRegistry:
             return load_agents_context()
         base_context = load_agents_context().strip()
         project_context = project.read_context().strip()
+        project_guidance = project.read_guidance().strip()
         header_lines = [f"Project focus: {project.name}"]
         if project.description:
             header_lines.append(project.description)
         sections = ["\n".join(header_lines)]
         if project_context:
             sections.append(project_context)
+        if project_guidance:
+            sections.append(project_guidance)
         if base_context:
             sections.append(f"Shared agent guidance:\n{base_context}")
         return "\n\n---\n\n".join(section.strip() for section in sections if section.strip()).strip()
