@@ -11,3 +11,5 @@ frontend/projects/
 projects/*
 !projects/README.md
 !projects/agent-dev-host/
+
+ROADMAP.md
