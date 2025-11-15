@@ -208,6 +208,13 @@ class ProjectRegistry:
         if project.description:
             header_lines.append(project.description)
         sections = ["\n".join(header_lines)]
+        if project.project_id != "agent-dev-host":
+            sections.append(
+                "Host guardrail: Since this prompt does not target the Agent Dev Host, "
+                "do not edit the host frontend (`frontend/index.html` or shared Vue/Vuetify scaffolding), "
+                "backend (`backend/` services), or other platform internals. Limit host interactions to "
+                "logging/progress updates only."
+            )
         if project_context:
             sections.append(project_context)
         if project_guidance:

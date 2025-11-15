@@ -1,0 +1,54 @@
+<svg width="96" height="96" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="codexNovaLogoTitle codexNovaLogoDesc">
+  <title id="codexNovaLogoTitle">Codex Nova Aurora</title>
+  <desc id="codexNovaLogoDesc">Rounded gradient tile with a stylized CN monogram and orbiting spark</desc>
+  <defs>
+    <linearGradient id="auroraBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="45%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#a855f7" />
+    </linearGradient>
+    <linearGradient id="auroraHighlight" x1="20%" y1="0%" x2="80%" y2="80%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.75" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="monogramFill" x1="28" y1="24" x2="68" y2="72" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#c7d2fe" />
+    </linearGradient>
+    <linearGradient id="novaAccent" x1="30" y1="34" x2="70" y2="74" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5eead4" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+    <linearGradient id="orbitStroke" x1="18" y1="56" x2="78" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.85" />
+    </linearGradient>
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="2" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="96" height="96" rx="24" fill="url(#auroraBg)" />
+  <path d="M8 30c9-16 25-26 40-26 15 0 31 7.5 40 20.3V8H8z" fill="url(#auroraHighlight)" opacity="0.25" />
+  <path
+    d="M66 26.2c-4.8-3.4-10.4-5.4-15.8-5.4-15.7 0-28.5 12.8-28.5 28.4S34.5 77.6 50.2 77.6c5.4 0 11-1.9 15.8-5.4l-5.6-7.3c-3.1 2.2-6.6 3.5-10.4 3.5-9.7 0-17.3-7.4-17.3-17.4s7.6-17.4 17.3-17.4c3.8 0 7.4 1.2 10.4 3.5z"
+    fill="url(#monogramFill)"
+    opacity="0.95"
+  />
+  <path
+    d="M30 70V34h9.6l16 21.8V34H66v36h-9l-17-22.4V70z"
+    fill="url(#novaAccent)"
+  />
+  <path
+    d="M20 58.5c10.4 8.4 27 12.2 39.8 7.6 8.4-3 14.6-9.2 18.2-17.3"
+    fill="none"
+    stroke="url(#orbitStroke)"
+    stroke-width="3.5"
+    stroke-linecap="round"
+    filter="url(#softGlow)"
+  />
+  <circle cx="76" cy="45" r="4.2" fill="#fef3c7" stroke="#fde68a" stroke-width="1.5" />
+</svg>

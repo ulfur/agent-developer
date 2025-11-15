@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <title>Codex Nova</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="./logo.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" />
@@ -170,6 +171,7 @@
         justify-content: space-between;
         gap: 0.75rem;
         flex-wrap: nowrap;
+        min-height: 56px;
       }
 
       .chat-card__header > :first-child {
@@ -577,6 +579,19 @@
         flex-shrink: 0;
       }
 
+      .average-prompt-time {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+
+      .average-prompt-time__value {
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
       .composer-actions {
         display: flex;
         justify-content: space-between;
@@ -719,7 +734,7 @@
         cursor: pointer;
         display: inline-flex;
         align-items: center;
-        gap: 0.35rem;
+        gap: 0.6rem;
         text-decoration: none;
       }
 
@@ -727,6 +742,20 @@
         outline: 2px solid var(--card-border);
         outline-offset: 2px;
         border-radius: 6px;
+      }
+
+      .global-header__logo {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        flex-shrink: 0;
+      }
+
+      .global-header__title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
       }
 
       .theme-toggle {
@@ -792,6 +821,7 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        min-height: 56px;
       }
 
       .queue-card-title span:first-child {
@@ -872,10 +902,10 @@
         display: inline-flex;
         align-items: center;
         gap: 0.35rem;
-        padding: 0.2rem 0.6rem;
+        padding: 0.1rem 0.5rem;
         border-radius: 999px;
         border: 1px solid rgba(59, 130, 246, 0.4);
-        font-size: 0.6rem;
+        font-size: 0.55rem;
         text-transform: uppercase;
         letter-spacing: 0.08em;
         color: #60a5fa;
@@ -955,6 +985,8 @@
       const WS_RECONNECT_MIN_MS = 1000;
       const WS_RECONNECT_MAX_MS = 10000;
       const LOG_REFRESH_INTERVAL_MS = 30000;
+      const PROMPT_AVERAGE_WINDOW = 20;
+      const PROMPT_DURATION_STATUSES = new Set(['completed', 'failed', 'canceled']);
 
       const createApiClient = (getToken, onUnauthorized) => {
         return async (path, options = {}) => {
@@ -2005,6 +2037,36 @@
               .filter(Boolean);
           });
 
+          const averagePromptDurationSeconds = computed(() => {
+            if (!queue.value.length) {
+              return null;
+            }
+            const recentEntries = queue.value.slice(0, PROMPT_AVERAGE_WINDOW);
+            const durations = recentEntries
+              .map((item) => {
+                const status = (item.status || '').toLowerCase();
+                if (!PROMPT_DURATION_STATUSES.has(status)) {
+                  return null;
+                }
+                return computeRuntimeSeconds(item.created_at, item.updated_at);
+              })
+              .filter((seconds) => seconds != null);
+            if (!durations.length) {
+              return null;
+            }
+            const total = durations.reduce((sum, seconds) => sum + seconds, 0);
+            const average = total / durations.length;
+            return Number.isFinite(average) ? average : null;
+          });
+
+          const averagePromptDurationDisplay = computed(() => {
+            const seconds = averagePromptDurationSeconds.value;
+            if (seconds == null) {
+              return '—';
+            }
+            return formatQueueDuration(seconds);
+          });
+
           const canEditSelectedPrompt = computed(() => {
             if (!selectedPrompt.value) {
               return false;
@@ -2705,6 +2767,7 @@
             promptText,
             queue,
             queueEntries,
+            averagePromptDurationDisplay,
             projectOptions,
             selectedProjectId,
             activeProjectDescription,
@@ -2826,7 +2889,8 @@
               <v-app-bar class="global-header" flat>
                 <v-app-bar-title>
                   <button type="button" class="global-header__home-link" @click="goHome">
-                    Codex Nova
+                    <img src="./logo.svg" alt="Codex Nova" class="global-header__logo" width="36" height="36" />
+                    <span class="global-header__title">Codex Nova</span>
                   </button>
                 </v-app-bar-title>
                 <v-spacer />
@@ -2899,12 +2963,6 @@
                       </template>
                       <v-card class="user-menu-card" elevation="8">
                         <v-list density="compact">
-                          <v-list-item class="queue-menu-item" @click="goHome">
-                            <template #prepend>
-                              <span class="user-menu-icon mdi mdi-view-list" aria-hidden="true"></span>
-                            </template>
-                            <v-list-item-title>Prompt queue</v-list-item-title>
-                          </v-list-item>
                           <v-list-item class="settings-menu-item" @click="openSettingsView">
                             <template #prepend>
                               <span class="user-menu-icon mdi mdi-account-cog" aria-hidden="true"></span>
@@ -3266,8 +3324,9 @@
                           @keydown.enter="handleComposerKeydown"
                         />
                         <div class="composer-actions">
-                          <div class="text-caption text-medium-emphasis" v-if="health">
-                            Last health check {{ formatDate(health.timestamp) }}
+                          <div class="text-caption text-medium-emphasis average-prompt-time" v-if="health">
+                            <span>Average prompt time</span>
+                            <span class="average-prompt-time__value">{{ averagePromptDurationDisplay }}</span>
                           </div>
                           <v-btn
                             color="primary"
