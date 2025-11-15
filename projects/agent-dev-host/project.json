@@ -1,0 +1,8 @@
+{
+  "id": "agent-dev-host",
+  "name": "Agent Dev Host",
+  "description": "Core platform for the Codex-enabled development host and its backend/frontend codebase.",
+  "contextFile": "context.md",
+  "launchPath": null,
+  "default": true
+}

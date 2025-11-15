@@ -164,6 +164,36 @@
         overflow: hidden;
       }
 
+      .chat-card__header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+        flex-wrap: nowrap;
+      }
+
+      .chat-card__header > :first-child {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      .chat-card__header .thread-header__actions {
+        flex: 0 0 auto;
+      }
+
+      @media (max-width: 640px) {
+        .chat-card__header {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.5rem;
+        }
+
+        .chat-card__header .thread-header__actions {
+          width: 100%;
+          justify-content: flex-start;
+        }
+      }
+
       .log-card {
         display: flex;
         flex-direction: column;
@@ -769,6 +799,88 @@
         font-weight: 500;
       }
 
+      .header-menus {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .projects-menu__activator,
+      .user-menu__activator {
+        text-transform: none;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        color: var(--text-primary) !important;
+        font-weight: 600;
+      }
+
+      .projects-menu__activator {
+        letter-spacing: 0.02em;
+      }
+
+      .projects-menu__activator .mdi,
+      .user-menu__activator .mdi {
+        font-size: 18px;
+      }
+
+      .projects-menu-card {
+        min-width: 260px;
+        max-width: 320px;
+        width: min(320px, calc(100vw - 24px));
+      }
+
+      .projects-menu__item {
+        align-items: flex-start;
+      }
+
+      .projects-menu__subtitle {
+        white-space: normal;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        line-height: 1.35;
+        max-height: calc(1.35em * 2);
+        overflow-wrap: anywhere;
+      }
+
+      .project-focus-badge {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background-color: #3b82f6;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+        display: inline-flex;
+        flex-shrink: 0;
+        margin-left: 0.5rem;
+      }
+
+      .project-selector {
+        padding: 1rem 1.5rem 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      .project-selector__hint {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+
+      .prompt-project-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        border: 1px solid rgba(59, 130, 246, 0.4);
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #60a5fa;
+      }
+
       .chat-card-title__heading {
         display: flex;
         align-items: center;
@@ -806,19 +918,6 @@
         font-weight: 600;
       }
 
-      .user-menu__activator {
-        text-transform: none;
-        display: flex;
-        align-items: center;
-        gap: 0.35rem;
-        color: var(--text-primary) !important;
-        font-weight: 600;
-      }
-
-      .user-menu__activator .mdi {
-        font-size: 18px;
-      }
-
       .user-menu-card {
         min-width: 250px;
         padding: 0.25rem 0;
@@ -851,6 +950,7 @@
       const { createRouter, createWebHashHistory, useRoute, useRouter } = VueRouter;
       const THEME_STORAGE_KEY = 'codex-theme-mode';
       const AUTH_TOKEN_KEY = 'codex-auth-token';
+      const PROJECT_STORAGE_KEY = 'codex-active-project';
       const QUEUE_DETAIL_MAX = 160;
       const WS_RECONNECT_MIN_MS = 1000;
       const WS_RECONNECT_MAX_MS = 10000;
@@ -949,6 +1049,9 @@
           const editPromptText = ref('');
           const editPromptError = ref('');
           const editPromptSaving = ref(false);
+          const projectOptions = ref([]);
+          const selectedProjectId = ref('');
+          const defaultProjectId = ref(null);
           const websocketRef = ref(null);
           const wsStatus = ref('disconnected');
           const realtimeReady = ref(false);
@@ -1046,6 +1149,15 @@
             router.push({ name: 'queue' }).catch(() => {});
           };
 
+          const openProject = (project) => {
+            if (!project || !project.launch_url) {
+              return;
+            }
+            if (typeof window !== 'undefined') {
+              window.open(project.launch_url, '_blank', 'noopener,noreferrer');
+            }
+          };
+
           watch(
             () => route.name,
             (name, previous) => {
@@ -1070,6 +1182,17 @@
             { immediate: true }
           );
 
+          watch(
+            selectedProjectId,
+            (value) => {
+              if (!value || !projectLookup.value.has(value)) {
+                persistProjectSelection('');
+                return;
+              }
+              persistProjectSelection(value);
+            }
+          );
+
           const persistToken = (token) => {
             if (typeof window === 'undefined' || !window.localStorage) {
               return;
@@ -1083,6 +1206,52 @@
             } catch (error) {
               console.warn('Unable to persist auth token', error);
             }
+          };
+
+          const loadStoredProjectId = () => {
+            if (typeof window === 'undefined' || !window.localStorage) {
+              return '';
+            }
+            try {
+              return window.localStorage.getItem(PROJECT_STORAGE_KEY) || '';
+            } catch (error) {
+              console.warn('Unable to read stored project focus', error);
+              return '';
+            }
+          };
+
+          const persistProjectSelection = (projectId) => {
+            if (typeof window === 'undefined' || !window.localStorage) {
+              return;
+            }
+            try {
+              if (projectId) {
+                window.localStorage.setItem(PROJECT_STORAGE_KEY, projectId);
+              } else {
+                window.localStorage.removeItem(PROJECT_STORAGE_KEY);
+              }
+            } catch (error) {
+              console.warn('Unable to persist project focus', error);
+            }
+          };
+
+          const applyProjectSelection = () => {
+            const availableIds = projectOptions.value
+              .map((project) => project?.id)
+              .filter((id) => typeof id === 'string' && id.length);
+            if (!availableIds.length) {
+              selectedProjectId.value = '';
+              return;
+            }
+            const stored = loadStoredProjectId();
+            const candidates = [
+              stored,
+              selectedProjectId.value,
+              defaultProjectId.value,
+              availableIds[0],
+            ];
+            const resolved = candidates.find((id) => id && availableIds.includes(id));
+            selectedProjectId.value = resolved || '';
           };
 
           const resetSessionState = () => {
@@ -1695,6 +1864,55 @@
 
           const globalContext = computed(() => selectedPrompt.value?.agents_context || '');
 
+          const projectLookup = computed(() => {
+            const map = new Map();
+            projectOptions.value.forEach((project) => {
+              if (project && project.id) {
+                map.set(project.id, project);
+              }
+            });
+            return map;
+          });
+
+          const activeProjectId = computed(() => {
+            const current = selectedProjectId.value;
+            if (current && projectLookup.value.has(current)) {
+              return current;
+            }
+            const fallback = defaultProjectId.value;
+            if (fallback && projectLookup.value.has(fallback)) {
+              return fallback;
+            }
+            const first = projectOptions.value.find((project) => project?.id);
+            return first ? first.id : null;
+          });
+
+          const activeProject = computed(() => {
+            const id = activeProjectId.value;
+            if (!id) {
+              return null;
+            }
+            return projectLookup.value.get(id) || null;
+          });
+
+          const activeProjectDescription = computed(() => activeProject.value?.description || '');
+
+          const selectedPromptProject = computed(() => {
+            const prompt = selectedPrompt.value;
+            if (!prompt) {
+              return null;
+            }
+            if (prompt.project?.id) {
+              return prompt.project;
+            }
+            if (prompt.project_id && projectLookup.value.has(prompt.project_id)) {
+              return projectLookup.value.get(prompt.project_id);
+            }
+            return null;
+          });
+
+          const selectedPromptProjectName = computed(() => selectedPromptProject.value?.name || '');
+
           const activeStream = computed(() => {
             const id = selectedPrompt.value?.prompt_id;
             if (!id) return null;
@@ -1744,12 +1962,15 @@
           });
 
           const queueEntries = computed(() => {
-            return queue.value.map((item, index) => {
-              const status = (item.status || '').toLowerCase();
-              const isCompleted = status === 'completed';
-              const isFailed = status === 'failed';
-              const isCanceled = status === 'canceled';
-              const runtimeSeconds =
+            const lookup = projectLookup.value;
+            const focusProjectId = activeProjectId.value;
+            return queue.value
+              .map((item, index) => {
+                const status = (item.status || '').toLowerCase();
+                const isCompleted = status === 'completed';
+                const isFailed = status === 'failed';
+                const isCanceled = status === 'canceled';
+                const runtimeSeconds =
                 isCompleted || isFailed || isCanceled
                   ? computeRuntimeSeconds(item.created_at, item.updated_at)
                   : null;
@@ -1769,14 +1990,19 @@
                 normalizedDetail.length > QUEUE_DETAIL_MAX
                   ? `${normalizedDetail.slice(0, QUEUE_DETAIL_MAX - 1)}…`
                   : normalizedDetail || placeholder;
-              return {
-                ...item,
-                queueIndex: index + 1,
-                createdDisplay: formatQueueTimestamp(item.created_at),
-                runtimeDisplay: runtimeSeconds != null ? formatQueueDuration(runtimeSeconds) : null,
-                detailLine: detail,
-              };
-            });
+                const entryProjectId = item.project?.id || item.project_id || null;
+                if (focusProjectId && entryProjectId !== focusProjectId) {
+                  return null;
+                }
+                return {
+                  ...item,
+                  queueIndex: index + 1,
+                  createdDisplay: formatQueueTimestamp(item.created_at),
+                  runtimeDisplay: runtimeSeconds != null ? formatQueueDuration(runtimeSeconds) : null,
+                  detailLine: detail,
+                };
+              })
+              .filter(Boolean);
           });
 
           const canEditSelectedPrompt = computed(() => {
@@ -1962,6 +2188,21 @@
             { immediate: true }
           );
 
+          const fetchProjects = async () => {
+            try {
+              const data = await api('/api/projects');
+              const items = Array.isArray(data?.projects) ? data.projects : [];
+              projectOptions.value = items;
+              defaultProjectId.value = data?.default_project_id || null;
+              applyProjectSelection();
+            } catch (error) {
+              console.error('Unable to load projects', error);
+              projectOptions.value = [];
+              defaultProjectId.value = null;
+              selectedProjectId.value = '';
+            }
+          };
+
           const fetchPrompts = async (options = {}) => {
             if (!isAuthenticated.value) {
               loading.value = false;
@@ -2115,9 +2356,13 @@
             if (!isAuthenticated.value || !promptText.value.trim()) return;
             submitting.value = true;
             try {
+              const payload = { prompt: promptText.value };
+              if (activeProjectId.value) {
+                payload.project_id = activeProjectId.value;
+              }
               const response = await api('/api/prompts', {
                 method: 'POST',
-                body: JSON.stringify({ prompt: promptText.value }),
+                body: JSON.stringify(payload),
               });
               promptText.value = '';
               if (response?.prompt_id) {
@@ -2422,6 +2667,7 @@
 
           onMounted(async () => {
             initTheme();
+            fetchProjects().catch(() => {});
             if (typeof window !== 'undefined') {
               window.addEventListener('resize', handleWindowResize);
             }
@@ -2459,6 +2705,10 @@
             promptText,
             queue,
             queueEntries,
+            projectOptions,
+            selectedProjectId,
+            activeProjectDescription,
+            activeProjectId,
             canEditSelectedPrompt,
             canDeleteSelectedPrompt,
             canRestartSelectedPrompt,
@@ -2482,6 +2732,7 @@
             attemptLogs,
             attemptKey,
             globalContext,
+            selectedPromptProjectName,
             activeStream,
             showLiveStream,
             liveAttemptNumber,
@@ -2491,6 +2742,7 @@
             openSettingsView,
             returnToQueueView,
             goHome,
+            openProject,
             passwordForm,
             passwordChangeLoading,
             passwordChangeError,
@@ -2578,69 +2830,121 @@
                   </button>
                 </v-app-bar-title>
                 <v-spacer />
-                <div v-if="isAuthenticated" class="user-summary mr-4">
-                  <v-menu location="bottom end" transition="scale-transition">
+                <div class="header-menus">
+                  <v-menu
+                    v-if="projectOptions.length"
+                    location="bottom end"
+                    transition="scale-transition"
+                  >
                     <template #activator="{ props }">
                       <v-btn
                         v-bind="props"
+                        class="projects-menu__activator"
                         variant="text"
-                        class="user-menu__activator"
                         density="comfortable"
                       >
-                        <span class="user-summary__email">
-                          {{ (currentUser && (currentUser.name || currentUser.email)) || 'Signed in' }}
-                        </span>
+                        <span>Projects</span>
                         <span class="mdi mdi-menu-down" aria-hidden="true"></span>
                       </v-btn>
                     </template>
-                    <v-card class="user-menu-card" elevation="8">
-                      <v-list density="compact">
-                        <v-list-item class="queue-menu-item" @click="goHome">
-                          <template #prepend>
-                            <span class="user-menu-icon mdi mdi-view-list" aria-hidden="true"></span>
-                          </template>
-                          <v-list-item-title>Prompt queue</v-list-item-title>
-                        </v-list-item>
-                        <v-list-item class="settings-menu-item" @click="openSettingsView">
-                          <template #prepend>
-                            <span class="user-menu-icon mdi mdi-account-cog" aria-hidden="true"></span>
-                          </template>
-                          <v-list-item-title>Settings</v-list-item-title>
-                        </v-list-item>
-                        <v-divider class="my-1" />
-                        <v-list-item class="logout-list-item" @click="logout">
-                          <template #prepend>
-                            <span class="user-menu-icon mdi mdi-logout" aria-hidden="true"></span>
-                          </template>
-                          <v-list-item-title>Sign out</v-list-item-title>
+                    <v-card class="projects-menu-card" elevation="8">
+                      <v-list>
+                        <v-list-item
+                          v-for="project in projectOptions"
+                          :key="project.id"
+                          class="projects-menu__item"
+                          :disabled="!project.launch_url"
+                          @click="openProject(project)"
+                        >
+                          <v-list-item-title>{{ project.name }}</v-list-item-title>
+                          <v-list-item-subtitle class="projects-menu__subtitle">
+                            {{ project.description || 'No description provided yet.' }}
+                          </v-list-item-subtitle>
                           <template #append>
-                            <button
-                              class="theme-toggle logout-theme-toggle"
-                              type="button"
-                              role="switch"
-                              :aria-checked="themeMode === 'dark'"
-                              :aria-label="themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
-                              @click.stop="toggleTheme"
-                              @keydown.enter.prevent.stop="toggleTheme"
-                              @keydown.space.prevent.stop="toggleTheme"
-                            >
-                              <span class="theme-toggle__icon mdi mdi-white-balance-sunny" aria-hidden="true"></span>
-                              <span class="theme-toggle__icon mdi mdi-weather-night" aria-hidden="true"></span>
-                              <span class="theme-toggle__thumb" :class="{ 'theme-toggle__thumb--right': themeMode === 'dark' }">
-                                <span
-                                  :class="['mdi', themeMode === 'dark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny']"
-                                  aria-hidden="true"
-                                ></span>
-                              </span>
-                            </button>
+                            <span
+                              v-if="project.id === activeProjectId"
+                              class="project-focus-badge"
+                              role="img"
+                              aria-label="Focused project"
+                              title="Focused project"
+                            ></span>
                           </template>
                         </v-list-item>
                       </v-list>
                     </v-card>
                   </v-menu>
-                </div>
-                <template v-else>
+                  <v-btn
+                    v-else
+                    class="projects-menu__activator"
+                    variant="text"
+                    density="comfortable"
+                    disabled
+                  >
+                    Projects
+                  </v-btn>
+                  <div v-if="isAuthenticated" class="user-summary">
+                    <v-menu location="bottom end" transition="scale-transition">
+                      <template #activator="{ props }">
+                        <v-btn
+                          v-bind="props"
+                          variant="text"
+                          class="user-menu__activator"
+                          density="comfortable"
+                        >
+                          <span class="user-summary__email">
+                            {{ (currentUser && (currentUser.name || currentUser.email)) || 'Signed in' }}
+                          </span>
+                          <span class="mdi mdi-menu-down" aria-hidden="true"></span>
+                        </v-btn>
+                      </template>
+                      <v-card class="user-menu-card" elevation="8">
+                        <v-list density="compact">
+                          <v-list-item class="queue-menu-item" @click="goHome">
+                            <template #prepend>
+                              <span class="user-menu-icon mdi mdi-view-list" aria-hidden="true"></span>
+                            </template>
+                            <v-list-item-title>Prompt queue</v-list-item-title>
+                          </v-list-item>
+                          <v-list-item class="settings-menu-item" @click="openSettingsView">
+                            <template #prepend>
+                              <span class="user-menu-icon mdi mdi-account-cog" aria-hidden="true"></span>
+                            </template>
+                            <v-list-item-title>Settings</v-list-item-title>
+                          </v-list-item>
+                          <v-divider class="my-1" />
+                          <v-list-item class="logout-list-item" @click="logout">
+                            <template #prepend>
+                              <span class="user-menu-icon mdi mdi-logout" aria-hidden="true"></span>
+                            </template>
+                            <v-list-item-title>Sign out</v-list-item-title>
+                            <template #append>
+                              <button
+                                class="theme-toggle logout-theme-toggle"
+                                type="button"
+                                role="switch"
+                                :aria-checked="themeMode === 'dark'"
+                                :aria-label="themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+                                @click.stop="toggleTheme"
+                                @keydown.enter.prevent.stop="toggleTheme"
+                                @keydown.space.prevent.stop="toggleTheme"
+                              >
+                                <span class="theme-toggle__icon mdi mdi-white-balance-sunny" aria-hidden="true"></span>
+                                <span class="theme-toggle__icon mdi mdi-weather-night" aria-hidden="true"></span>
+                                <span class="theme-toggle__thumb" :class="{ 'theme-toggle__thumb--right': themeMode === 'dark' }">
+                                  <span
+                                    :class="['mdi', themeMode === 'dark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny']"
+                                    aria-hidden="true"
+                                  ></span>
+                                </span>
+                              </button>
+                            </template>
+                          </v-list-item>
+                        </v-list>
+                      </v-card>
+                    </v-menu>
+                  </div>
                   <button
+                    v-else
                     class="theme-toggle ml-3 header-theme-toggle"
                     type="button"
                     role="switch"
@@ -2659,7 +2963,7 @@
                       ></span>
                     </span>
                   </button>
-                </template>
+                </div>
             </v-app-bar>
             <v-main>
               <v-container v-if="!isAuthenticated" class="login-container" fluid>
@@ -2931,6 +3235,26 @@
                         </v-chip>
                       </v-card-title>
                       <v-divider />
+                      <div class="project-selector">
+                        <v-select
+                          v-model="selectedProjectId"
+                          :items="projectOptions"
+                          item-title="name"
+                          item-value="id"
+                          label="Focused project"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details="auto"
+                          :disabled="!projectOptions.length"
+                        />
+                        <div class="project-selector__hint">
+                          {{
+                            activeProjectDescription
+                              || 'Select a project to scope Codex runs and context.'
+                          }}
+                        </div>
+                      </div>
+                      <v-divider />
                       <div class="queue-composer">
                         <v-textarea
                           v-model="promptText"
@@ -2991,9 +3315,17 @@
                   </v-col>
                   <v-col cols="12" md="8" class="d-flex flex-column">
                     <v-card elevation="0" class="panel-card chat-card">
-                      <v-card-title class="justify-space-between align-start">
+                      <v-card-title class="chat-card__header justify-space-between align-start">
                         <div>
-                          <div class="chat-card-title__heading">Codex Run Output</div>
+                          <div class="chat-card-title__heading">
+                            <span>Codex Task</span>
+                            <span
+                              v-if="selectedPromptProjectName"
+                              class="prompt-project-pill"
+                            >
+                              Project · {{ selectedPromptProjectName }}
+                            </span>
+                          </div>
                           <div class="text-caption text-medium-emphasis" v-if="selectedPrompt">
                             Prompt {{ selectedPrompt.prompt_id }} · Attempts {{ selectedPrompt.attempts || 0 }}
                           </div>

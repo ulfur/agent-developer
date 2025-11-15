@@ -39,6 +39,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = REPO_ROOT / "data"
 LOG_DIR = REPO_ROOT / "logs"
 FRONTEND_DIR = REPO_ROOT / "frontend"
+PROJECTS_DIR = REPO_ROOT / "projects"
 PROMPT_DB_PATH = DATA_DIR / "prompts.json"
 GENERAL_LOG_PATH = LOG_DIR / "progress.log"
 APP_CONTEXT: Dict[str, Any] = {}
@@ -69,7 +70,7 @@ def utcnow_iso() -> str:
 
 
 def ensure_dirs() -> None:
-    for path in (DATA_DIR, LOG_DIR, FRONTEND_DIR):
+    for path in (DATA_DIR, LOG_DIR, FRONTEND_DIR, PROJECTS_DIR):
         path.mkdir(parents=True, exist_ok=True)
 
 
@@ -78,6 +79,127 @@ def load_agents_context() -> str:
     if agents_file.exists():
         return agents_file.read_text(encoding="utf-8")
     return ""
+
+
+@dataclass
+class ProjectDefinition:
+    project_id: str
+    name: str
+    description: str
+    context_file: Path | None
+    launch_path: Optional[str] = None
+    is_default: bool = False
+
+    def read_context(self) -> str:
+        if not self.context_file:
+            return ""
+        try:
+            return self.context_file.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+
+    def to_payload(self) -> Dict[str, Any]:
+        return {
+            "id": self.project_id,
+            "name": self.name,
+            "description": self.description,
+            "launch_url": self.launch_path,
+        }
+
+
+class ProjectRegistry:
+    def __init__(self, base_dir: Path, preferred_default: Optional[str] = None) -> None:
+        self.base_dir = base_dir
+        self._projects: dict[str, ProjectDefinition] = {}
+        self._preferred_default = preferred_default
+        self.default_project_id: Optional[str] = None
+        self.reload()
+
+    def reload(self) -> None:
+        self._projects.clear()
+        resolved_default: Optional[str] = None
+        try:
+            entries = sorted(
+                [path for path in self.base_dir.iterdir() if path.is_dir()],
+                key=lambda item: item.name.lower(),
+            )
+        except FileNotFoundError:
+            entries = []
+        for directory in entries:
+            metadata = self._load_metadata(directory)
+            project_id = (metadata.get("id") or directory.name).strip()
+            if not project_id:
+                continue
+            name = (metadata.get("name") or project_id).strip()
+            description = (metadata.get("description") or "").strip()
+            context_filename = (metadata.get("contextFile") or metadata.get("context_file") or "context.md").strip()
+            context_path = directory / context_filename if context_filename else None
+            launch_path = metadata.get("launchPath") or metadata.get("launch_path") or metadata.get("launchUrl")
+            is_default = bool(metadata.get("default"))
+            project = ProjectDefinition(
+                project_id=project_id,
+                name=name or project_id,
+                description=description,
+                context_file=context_path,
+                launch_path=launch_path,
+                is_default=is_default,
+            )
+            self._projects[project_id] = project
+            if is_default:
+                resolved_default = project_id
+        if self._preferred_default and self._preferred_default in self._projects:
+            resolved_default = self._preferred_default
+        if not resolved_default and self._projects:
+            resolved_default = next(iter(self._projects.keys()))
+        self.default_project_id = resolved_default
+
+    def _load_metadata(self, directory: Path) -> Dict[str, Any]:
+        metadata_path = directory / "project.json"
+        if not metadata_path.exists():
+            return {}
+        try:
+            return json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def get(self, project_id: Optional[str]) -> Optional[ProjectDefinition]:
+        if not project_id:
+            return self._projects.get(self.default_project_id or "")
+        return self._projects.get(project_id)
+
+    def resolve_project_id(self, requested_id: Optional[str]) -> Optional[str]:
+        if requested_id and requested_id in self._projects:
+            return requested_id
+        return self.default_project_id
+
+    def to_payload(self) -> Dict[str, Any]:
+        items = [project.to_payload() for project in self._projects.values()]
+        return {
+            "projects": items,
+            "default_project_id": self.default_project_id,
+        }
+
+    def context_for(self, project_id: Optional[str]) -> str:
+        project = self.get(project_id)
+        if not project:
+            return load_agents_context()
+        base_context = load_agents_context().strip()
+        project_context = project.read_context().strip()
+        header_lines = [f"Project focus: {project.name}"]
+        if project.description:
+            header_lines.append(project.description)
+        sections = ["\n".join(header_lines)]
+        if project_context:
+            sections.append(project_context)
+        if base_context:
+            sections.append(f"Shared agent guidance:\n{base_context}")
+        return "\n\n---\n\n".join(section.strip() for section in sections if section.strip()).strip()
+
+
+def build_prompt_context(project_id: Optional[str], registry: Optional[ProjectRegistry]) -> str:
+    if registry:
+        return registry.context_for(project_id)
+    return load_agents_context()
 
 
 ATTEMPT_HEADER_RE = re.compile(r"^Prompt received at (?P<ts>[^\n]+)", re.MULTILINE)
@@ -176,8 +298,10 @@ def _parse_attempt_chunk(chunk: str) -> dict[str, str] | None:
     }
 
 
-def build_prompt_payload(record: PromptRecord) -> Dict[str, Any]:
+def build_prompt_payload(record: "PromptRecord", registry: Optional[ProjectRegistry] = None) -> Dict[str, Any]:
     """Return the full API payload for a single prompt record."""
+    if registry is None:
+        registry = APP_CONTEXT.get("projects")
     payload = asdict(record)
     log_path = Path(record.log_path)
     if log_path.exists():
@@ -189,7 +313,11 @@ def build_prompt_payload(record: PromptRecord) -> Dict[str, Any]:
         log_text = ""
     payload["log"] = log_text
     payload["attempt_logs"] = parse_prompt_attempts(log_text)
-    payload["agents_context"] = load_agents_context()
+    payload["agents_context"] = build_prompt_context(record.project_id, registry)
+    if registry:
+        project = registry.get(record.project_id)
+        if project:
+            payload["project"] = project.to_payload()
     if record.status == "completed":
         payload["stdout_preview"] = extract_stdout_preview(record.log_path)
     else:
@@ -207,11 +335,13 @@ class PromptRecord:
     log_path: str
     result_summary: Optional[str] = None
     attempts: int = 0
+    project_id: Optional[str] = None
 
 
 class PromptStore:
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, project_registry: Optional[ProjectRegistry] = None):
         self.db_path = db_path
+        self.project_registry = project_registry
         self._lock = threading.Lock()
         self._pending: "queue.Queue[str]" = queue.Queue()
         self._records: Dict[str, PromptRecord] = {}
@@ -232,6 +362,7 @@ class PromptStore:
             for prompt_id, payload in data.items():
                 payload.setdefault("attempts", 0)
                 payload.pop("max_retries", None)
+                payload["project_id"] = self._normalize_project_id(payload.get("project_id"))
                 self._records[prompt_id] = PromptRecord(**payload)
                 if payload.get("status") == "queued":
                     self._pending.put(prompt_id)
@@ -270,7 +401,7 @@ class PromptStore:
     def _append_interrupted_attempt(
         self, record: PromptRecord, summary: str, interrupted_at: str
     ) -> None:
-        context_text = load_agents_context().strip() or "<agents.md missing>"
+        context_text = build_prompt_context(record.project_id, self.project_registry).strip() or "<context unavailable>"
         log_path = Path(record.log_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_lines = [
@@ -292,9 +423,10 @@ class PromptStore:
             log_file.write("\n\n".join(log_lines))
             log_file.write("\n")
 
-    def add_prompt(self, text: str) -> PromptRecord:
+    def add_prompt(self, text: str, project_id: Optional[str] = None) -> PromptRecord:
         prompt_id = uuid.uuid4().hex
         log_path = str(LOG_DIR / f"prompt_{prompt_id}.log")
+        normalized_project = self._normalize_project_id(project_id)
         record = PromptRecord(
             prompt_id=prompt_id,
             text=text,
@@ -302,6 +434,7 @@ class PromptStore:
             created_at=utcnow_iso(),
             updated_at=utcnow_iso(),
             log_path=log_path,
+            project_id=normalized_project,
         )
         with self._lock:
             self._records[prompt_id] = record
@@ -316,6 +449,10 @@ class PromptStore:
         items: list[dict[str, Any]] = []
         for rec in ordered:
             payload = asdict(rec)
+            if self.project_registry:
+                project = self.project_registry.get(rec.project_id)
+                if project:
+                    payload["project"] = project.to_payload()
             if rec.status == "completed":
                 payload["stdout_preview"] = extract_stdout_preview(rec.log_path)
             else:
@@ -337,6 +474,12 @@ class PromptStore:
             record.status = "running"
             record.updated_at = utcnow_iso()
         self._persist()
+        return record
+
+    def _normalize_project_id(self, project_id: Optional[str]) -> Optional[str]:
+        if not self.project_registry:
+            return project_id
+        return self.project_registry.resolve_project_id(project_id)
         return record
 
     def mark_completed(self, prompt_id: str, summary: str) -> None:
@@ -461,8 +604,13 @@ class CodexRunner:
                     pass
         return True
 
-    def run(self, prompt_id: str, prompt_text: str, log_path: Path) -> tuple[str, bool, bool]:
-        agents_context = load_agents_context()
+    def run(
+        self,
+        prompt_id: str,
+        prompt_text: str,
+        context_text: str,
+        log_path: Path,
+    ) -> tuple[str, bool, bool]:
         cmd = [self.codex_bin, "exec", "--skip-git-repo-check"]
         if self.sandbox_mode:
             cmd.extend(["--sandbox", self.sandbox_mode])
@@ -474,7 +622,7 @@ class CodexRunner:
             prompt_text,
             "",
             "Context provided to Codex:",
-            agents_context.strip() or "<agents.md missing>",
+            context_text.strip() or "<context unavailable>",
             "",
         ]
         log_lines = ["\n".join(header)]
@@ -658,7 +806,8 @@ class PromptWorker(threading.Thread):
             log_path = Path(record.log_path)
             self.logger.info("Processing prompt %s", prompt_id)
             try:
-                summary, success, canceled = self.runner.run(prompt_id, record.text, log_path)
+                context_text = build_prompt_context(record.project_id, self.store.project_registry)
+                summary, success, canceled = self.runner.run(prompt_id, record.text, context_text, log_path)
             finally:
                 with self._current_lock:
                     self._current_prompt_id = None
@@ -1001,10 +1150,17 @@ class WebSocketManager:
 class EventStreamer:
     """Bridges backend state changes to WebSocket clients."""
 
-    def __init__(self, store: PromptStore, logger: logging.Logger, ws_manager: WebSocketManager):
+    def __init__(
+        self,
+        store: PromptStore,
+        logger: logging.Logger,
+        ws_manager: WebSocketManager,
+        project_registry: Optional[ProjectRegistry] = None,
+    ):
         self.store = store
         self.logger = logger
         self.ws_manager = ws_manager
+        self.project_registry = project_registry
 
     def broadcast_queue(self, targets: Optional[Iterable[WebSocketConnection]] = None) -> None:
         snapshot = self.store.list_prompts()
@@ -1018,7 +1174,7 @@ class EventStreamer:
         record = self.store.get_prompt(prompt_id)
         if not record:
             return
-        payload = {"prompt": build_prompt_payload(record)}
+        payload = {"prompt": build_prompt_payload(record, self.project_registry)}
         self.ws_manager.broadcast("prompt_update", payload, targets=targets)
 
     def broadcast_prompt_deleted(
@@ -1120,6 +1276,14 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
 
     # API helpers -----------------------------------------------------
     def _handle_api_get(self) -> None:
+        if self.path == "/api/projects":
+            registry: Optional[ProjectRegistry] = APP_CONTEXT.get("projects")
+            if registry:
+                payload = registry.to_payload()
+            else:
+                payload = {"projects": [], "default_project_id": None}
+            self._write_json(payload)
+            return
         if not self._require_auth():
             return
         if self.path == "/api/health":
@@ -1139,7 +1303,8 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             if not record:
                 self._write_json({"error": "prompt not found"}, status=404)
             else:
-                self._write_json(build_prompt_payload(record))
+                registry: Optional[ProjectRegistry] = APP_CONTEXT.get("projects")
+                self._write_json(build_prompt_payload(record, registry))
         elif self.path == "/api/logs":
             if GENERAL_LOG_PATH.exists():
                 content = GENERAL_LOG_PATH.read_text(encoding="utf-8")
@@ -1187,7 +1352,8 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             if not text.strip():
                 self._write_json({"error": "prompt is required"}, status=400)
                 return
-            record = APP_CONTEXT["store"].add_prompt(text.strip())
+            project_id = payload.get("project_id") or payload.get("project")
+            record = APP_CONTEXT["store"].add_prompt(text.strip(), project_id=project_id)
             APP_CONTEXT["audit_logger"].info("Queued prompt %s", record.prompt_id)
             schedule_display_refresh("queued")
             events: Optional[EventStreamer] = APP_CONTEXT.get("events")
@@ -1325,7 +1491,8 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 events.broadcast_queue()
                 events.broadcast_prompt(prompt_id)
             schedule_display_refresh("edit")
-            self._write_json({"prompt": build_prompt_payload(record)})
+            registry: Optional[ProjectRegistry] = APP_CONTEXT.get("projects")
+            self._write_json({"prompt": build_prompt_payload(record, registry)})
         else:
             self._write_json({"error": "unknown endpoint"}, status=404)
 
@@ -1480,8 +1647,10 @@ def start_display_manager(store: PromptStore, logger: logging.Logger):
 
 def main(host: str = "0.0.0.0", port: int = 8080) -> None:
     ensure_dirs()
+    preferred_project = os.environ.get("DEFAULT_PROJECT_ID")
+    project_registry = ProjectRegistry(PROJECTS_DIR, preferred_project)
     audit_logger = configure_logging()
-    store = PromptStore(PROMPT_DB_PATH)
+    store = PromptStore(PROMPT_DB_PATH, project_registry)
     auth_manager = AuthManager(DATA_DIR)
     auth_manager.ensure_user("ulfurk@ulfurk.com", "dehost#1")
     ssh_key_manager = SSHKeyManager(DATA_DIR, audit_logger)
@@ -1490,7 +1659,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
     except SSHKeyError as exc:
         audit_logger.error("SSH key initialization failed: %s", exc)
     ws_manager = WebSocketManager(auth_manager, audit_logger)
-    events = EventStreamer(store, audit_logger, ws_manager)
+    events = EventStreamer(store, audit_logger, ws_manager, project_registry)
     ws_manager.event_streamer = events
     recovered_prompt_ids = store.consume_recovered_prompts()
     if recovered_prompt_ids:
@@ -1515,6 +1684,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         "events": events,
         "worker": worker,
         "ssh_keys": ssh_key_manager,
+        "projects": project_registry,
     }
     if recovered_prompt_ids:
         schedule_display_refresh("recovered prompts")

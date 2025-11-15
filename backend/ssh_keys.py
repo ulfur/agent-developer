@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import socket
 import subprocess
 from pathlib import Path
@@ -61,6 +62,7 @@ class SSHKeyManager:
 
         public_key = self._read_public_key(public_path)
         fingerprint = self._read_fingerprint(public_path)
+        self._sync_to_home_ssh(private_path, public_path)
 
         return {
             "type": key_type,
@@ -133,3 +135,30 @@ class SSHKeyManager:
         if len(parts) >= 2:
             return parts[1]
         return line[0]
+
+    # ------------------------------------------------------------------
+    def _sync_to_home_ssh(self, private_path: Path, public_path: Path) -> None:
+        """Copy managed keys into ~/.ssh for interactive use."""
+
+        home_dir = Path.home()
+        ssh_dir = home_dir / ".ssh"
+        try:
+            ssh_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        except OSError as exc:
+            self.logger.warning("Unable to ensure ~/.ssh exists: %s", exc)
+            return
+        try:
+            ssh_dir.chmod(0o700)
+        except OSError:
+            pass
+
+        targets = [
+            (private_path, ssh_dir / private_path.name, 0o600),
+            (public_path, ssh_dir / f"{private_path.name}.pub", 0o644),
+        ]
+        for src, dst, mode in targets:
+            try:
+                shutil.copy2(src, dst)
+                dst.chmod(mode)
+            except OSError as exc:
+                self.logger.warning("Unable to sync %s to %s: %s", src, dst, exc)
