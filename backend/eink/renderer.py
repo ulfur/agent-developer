@@ -24,6 +24,12 @@ BODY_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 )
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+HEADER_ICON_CANDIDATES = (
+    PROJECT_ROOT / "frontend" / "nightshift-header-dark.png",
+    PROJECT_ROOT / "frontend" / "nightshift-header-light.png",
+)
+
 
 class StatusRenderer:
     """Create monochrome bitmaps summarising queue status."""
@@ -33,7 +39,7 @@ class StatusRenderer:
         self.height = height
         self._title_font = self._load_font(size=84, candidates=TITLE_FONT_CANDIDATES)
         self._body_font = self._load_font(size=46, candidates=BODY_FONT_CANDIDATES)
-        self._header_logo = self._render_header_logo(int(self._title_font.size * 1.05))
+        self._header_logo = self._load_header_logo(int(self._title_font.size * 1.05))
         self._logo_text_gap = max(20, self._title_font.size // 4)
         self._margin = 56
         self._text_x = self._margin
@@ -260,7 +266,30 @@ class StatusRenderer:
             except OSError:
                 return None
 
-    def _render_header_logo(self, base_size: int) -> Image.Image:
+    def _load_header_logo(self, base_size: int) -> Image.Image:
+        """Load the official header asset when available, else draw the fallback mark."""
+        logo = self._load_header_png(base_size)
+        if logo:
+            return logo
+        return self._render_fallback_logo(base_size)
+
+    def _load_header_png(self, base_size: int) -> Image.Image | None:
+        """Convert the Nightshift header PNG into a grayscale bitmap for e-ink."""
+        for candidate in HEADER_ICON_CANDIDATES:
+            if not candidate.exists():
+                continue
+            try:
+                with Image.open(candidate) as source:
+                    logo = source.convert("RGBA")
+            except OSError:
+                continue
+            if logo.size != (base_size, base_size):
+                logo = ImageOps.fit(logo, (base_size, base_size), method=Image.LANCZOS)
+            grayscale = ImageOps.autocontrast(ImageOps.grayscale(logo.convert("RGB")))
+            return grayscale
+        return None
+
+    def _render_fallback_logo(self, base_size: int) -> Image.Image:
         """Render the simplified fallback mark described in docs/nightshift-logo-spec.md."""
 
         size = max(48, base_size)

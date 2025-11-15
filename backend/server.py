@@ -34,7 +34,11 @@ from urllib.parse import unquote, urlsplit
 
 from auth import AuthManager, AuthenticatedUser
 from eink.it8591 import IT8591Config, IT8951_ROTATE_180
-# from git_branching import GitBranchError, PromptBranchDiscipline
+try:  # optional git discipline helper (may not exist on deployments)
+    from git_branching import GitBranchError, PromptBranchDiscipline  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover - optional feature
+    GitBranchError = None
+    PromptBranchDiscipline = None
 from human_tasks import HumanTaskStore, build_human_task_payload
 from log_utils import extract_stdout_preview
 from preferences import PreferenceStore
@@ -1081,6 +1085,12 @@ class CodexRunner:
         self._active_process: Optional[subprocess.Popen[str]] = None
         self._cancel_target: Optional[str] = None
         self._cancel_summary: str = ""
+        if PromptBranchDiscipline is not None:
+            self.branch_discipline: Optional[PromptBranchDiscipline] = PromptBranchDiscipline(
+                repo_root, logger=self.logger
+            )
+        else:
+            self.branch_discipline = None
 
     def arm_prompt(self, prompt_id: str) -> None:
         with self._lock:
@@ -1194,12 +1204,12 @@ class CodexRunner:
             skip_execution = self._cancel_target == prompt_id
             pending_summary = self._cancel_summary if skip_execution else ""
 
-        if not skip_execution:
+        if not skip_execution and self.branch_discipline is not None:
             try:
                 git_session = self.branch_discipline.begin_run(prompt_id, prompt_text)
                 if git_session and git_session.notes:
                     git_notes.extend(git_session.notes)
-            except GitBranchError as exc:
+            except GitBranchError as exc:  # type: ignore[arg-type]
                 git_setup_error = str(exc)
                 git_notes.append(f"Git branch preparation failed: {git_setup_error}")
 
@@ -1278,9 +1288,10 @@ class CodexRunner:
         cleanup_error: Optional[str] = None
         if git_session:
             try:
-                cleanup_notes = self.branch_discipline.finalize_run(git_session)
-                if cleanup_notes:
-                    git_notes.extend(cleanup_notes)
+                if git_session and self.branch_discipline is not None:
+                    cleanup_notes = self.branch_discipline.finalize_run(git_session)
+                    if cleanup_notes:
+                        git_notes.extend(cleanup_notes)
             except GitBranchError as exc:
                 cleanup_error = str(exc)
                 git_notes.append(f"Git cleanup blocked: {cleanup_error}")

@@ -1,6 +1,6 @@
 # Projects registry
 
-This directory defines every focusable project that Codex can work on. Each subdirectory represents a single project and must provide:
+This directory defines every focusable project that Nightshift can work on. Each subdirectory represents a single project and must provide:
 
 - `project.json` – metadata (`id`, human friendly `name`, `description`, optional `launchPath`, and optional `default` flag).
 - `context.md` – task-specific background that is appended to the shared `agents.md` guidance whenever prompts run under that project.

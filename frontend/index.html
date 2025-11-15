@@ -918,10 +918,40 @@
         flex-shrink: 0;
       }
 
+      html[data-theme='light'] .global-header__logo {
+        box-shadow: none;
+      }
+
       .global-header__title {
         font-size: 1.35rem;
         font-weight: 600;
         letter-spacing: 0.01em;
+      }
+
+      .header-notifications {
+        display: flex;
+        align-items: center;
+        margin-inline-end: 0.5rem;
+      }
+
+      .human-tasks-trigger {
+        width: 44px;
+        height: 44px;
+        border-radius: 999px;
+        justify-content: center;
+      }
+
+      .human-tasks-trigger__icon {
+        font-size: 1.3rem;
+      }
+
+      .human-tasks-dropdown {
+        width: min(420px, calc(100vw - 32px));
+      }
+
+      .human-tasks-dropdown__footer {
+        font-size: 0.85rem;
+        color: var(--text-muted);
       }
 
       .theme-toggle {
@@ -1322,14 +1352,14 @@
         {
           id: 'project-focus',
           target: '[data-tour-id=\"tour-project-selector\"]',
-          title: 'Focus Codex on the right project',
-          description: 'Pick which project Codex should care about. This choice scopes prompts, context, and launch links.',
+          title: 'Focus Nightshift on the right project',
+          description: 'Pick which project Nightshift should care about. This choice scopes prompts, context, and launch links.',
         },
         {
           id: 'prompt-composer',
           target: '[data-tour-id=\"tour-prompt-composer\"]',
           title: 'Compose a new instruction',
-          description: 'Type what you want Codex to do, then press Send. Average turn duration helps you know how long you might wait.',
+          description: 'Type what you want Nightshift to do, then press Send. Average turn duration helps you know how long you might wait.',
         },
         {
           id: 'prompt-queue',
@@ -1341,12 +1371,12 @@
           id: 'human-task-queue',
           target: '[data-tour-id=\"tour-human-tasks\"]',
           title: 'Spot blockers fast',
-          description: 'Human Tasks capture anything that needs an operator. Add blockers via the CLI and monitor them here.',
+          description: 'Human Tasks capture anything that needs an operator. Watch the notification badge and open the dropdown to review blockers logged via the CLI.',
         },
         {
           id: 'prompt-thread',
           target: '[data-tour-id=\"tour-thread-panel\"]',
-          title: 'Review Codex output',
+          title: 'Review Nightshift output',
           description: 'The thread view holds your prompt, live stdout/stderr, and prior attempts—plus controls to edit, cancel, or retry.',
         },
       ];
@@ -1481,6 +1511,7 @@
           const humanTasksError = ref('');
           const humanTasksLoading = ref(false);
           const humanTasksRevision = ref(null);
+          const humanTasksMenuOpen = ref(false);
           const retrying = ref(false);
           const canceling = ref(false);
           const restarting = ref(false);
@@ -2046,6 +2077,7 @@
             humanTasksRevision.value = null;
             humanTasksError.value = '';
             humanTasksLoading.value = false;
+            humanTasksMenuOpen.value = false;
             if (message) {
               loginError.value = message;
             }
@@ -2654,6 +2686,61 @@
             return counts.open || 0;
           });
 
+          const formatHumanTaskBadgeCount = (value) => {
+            const numeric = typeof value === 'number' ? value : Number(value) || 0;
+            if (numeric > 99) {
+              return '99+';
+            }
+            return String(numeric);
+          };
+
+          const humanTasksBadgeState = computed(() => {
+            const errorMessage = humanTasksError.value;
+            if (errorMessage) {
+              return {
+                icon: 'mdi-bell-alert-outline',
+                badgeColor: 'error',
+                badgeText: '!',
+                showBadge: true,
+                label: `Human tasks unavailable: ${errorMessage}`,
+              };
+            }
+            const blocking = blockingHumanTaskCount.value;
+            if (blocking > 0) {
+              return {
+                icon: 'mdi-bell-alert',
+                badgeColor: 'error',
+                badgeText: formatHumanTaskBadgeCount(blocking),
+                showBadge: true,
+                label: blocking === 1 ? '1 blocking human task' : `${blocking} blocking human tasks`,
+              };
+            }
+            const open = openHumanTaskCount.value;
+            if (open > 0) {
+              return {
+                icon: 'mdi-bell-badge',
+                badgeColor: 'warning',
+                badgeText: formatHumanTaskBadgeCount(open),
+                showBadge: true,
+                label: open === 1 ? '1 open human task' : `${open} open human tasks`,
+              };
+            }
+            return {
+              icon: 'mdi-bell-outline',
+              badgeColor: '',
+              badgeText: '',
+              showBadge: false,
+              label: 'No human tasks waiting',
+            };
+          });
+
+          const humanTasksMenuLabel = computed(() => {
+            if (humanTasksLoading.value && !humanTaskEntries.value.length) {
+              return 'Loading human tasks';
+            }
+            return humanTasksBadgeState.value.label;
+          });
+
           const averagePromptDurationDisplay = computed(() => {
             const seconds = averagePromptDurationSeconds.value;
             if (seconds == null) {
@@ -3028,6 +3115,15 @@
           const refreshHumanTasks = () => {
             fetchHumanTasks().catch(() => {});
           };
+
+          watch(
+            () => humanTasksMenuOpen.value,
+            (isOpen) => {
+              if (isOpen) {
+                fetchHumanTasks({ silent: true }).catch(() => {});
+              }
+            }
+          );
 
           const fetchHealth = async () => {
             if (!isAuthenticated.value) {
@@ -3635,6 +3731,9 @@
             humanTaskEntries,
             humanTasksLoading,
             humanTasksError,
+            humanTasksBadgeState,
+            humanTasksMenuLabel,
+            humanTasksMenuOpen,
             blockingHumanTaskCount,
             openHumanTaskCount,
             refreshHumanTasks,
@@ -3730,7 +3829,7 @@
                 <v-card-title>Edit Prompt</v-card-title>
                 <v-card-text>
                   <p class="text-body-2 text-medium-emphasis mb-3">
-                    Update the queued prompt before Codex begins processing it.
+                    Update the queued prompt before Nightshift begins processing it.
                   </p>
                   <v-alert v-if="editPromptError" type="error" variant="tonal" class="mb-3">
                     {{ editPromptError }}
@@ -3793,6 +3892,126 @@
                   </div>
                 </v-app-bar-title>
                 <v-spacer />
+                <div
+                  v-if="isAuthenticated"
+                  class="header-notifications"
+                  data-tour-id="tour-human-tasks"
+                >
+                  <v-menu
+                    v-model="humanTasksMenuOpen"
+                    location="bottom start"
+                    transition="scale-transition"
+                    :close-on-content-click="false"
+                  >
+                    <template #activator="{ props }">
+                      <v-badge
+                        :model-value="humanTasksBadgeState.showBadge"
+                        :content="humanTasksBadgeState.badgeText"
+                        :color="humanTasksBadgeState.badgeColor || undefined"
+                      >
+                        <v-btn
+                          v-bind="props"
+                          icon
+                          variant="text"
+                          density="comfortable"
+                          class="human-tasks-trigger"
+                          :aria-label="humanTasksMenuLabel"
+                          :title="humanTasksMenuLabel"
+                        >
+                          <v-progress-circular
+                            v-if="humanTasksLoading && !humanTasksError"
+                            indeterminate
+                            size="18"
+                            width="2"
+                          ></v-progress-circular>
+                          <span
+                            v-else
+                            :class="['mdi', humanTasksBadgeState.icon, 'human-tasks-trigger__icon']"
+                            aria-hidden="true"
+                          ></span>
+                        </v-btn>
+                      </v-badge>
+                    </template>
+                    <v-card class="human-tasks-dropdown" elevation="10">
+                      <div class="human-tasks-panel">
+                        <div class="human-tasks-panel__header">
+                          <span class="human-tasks-panel__header-title">Human Tasks</span>
+                          <div class="human-tasks-panel__badges">
+                            <v-chip label size="small" variant="tonal" color="warning">
+                              Blocking {{ blockingHumanTaskCount }}
+                            </v-chip>
+                            <v-chip label size="small" variant="tonal" color="primary">
+                              Open {{ openHumanTaskCount }}
+                            </v-chip>
+                            <v-btn
+                              icon="mdi-refresh"
+                              size="small"
+                              variant="text"
+                              :loading="humanTasksLoading"
+                              :disabled="humanTasksLoading"
+                              @click="refreshHumanTasks"
+                              aria-label="Refresh human tasks"
+                            ></v-btn>
+                          </div>
+                        </div>
+                        <div class="human-tasks-panel__body">
+                          <v-alert
+                            v-if="humanTasksError"
+                            type="error"
+                            variant="tonal"
+                            density="comfortable"
+                            border="start"
+                          >
+                            {{ humanTasksError }}
+                          </v-alert>
+                          <v-skeleton-loader
+                            v-else-if="humanTasksLoading && !humanTaskEntries.length"
+                            type="list-item@2"
+                          />
+                          <div v-else-if="humanTaskEntries.length" class="human-tasks-list">
+                            <div v-for="task in humanTaskEntries" :key="task.task_id" class="human-task-entry">
+                              <div class="human-task-entry__header">
+                                <span>{{ task.title }}</span>
+                                <span class="text-caption text-medium-emphasis">
+                                  {{ task.statusDisplay }}
+                                </span>
+                              </div>
+                              <div class="human-task-entry__meta">
+                                <span>{{ task.projectDisplay }}</span>
+                                <span v-if="task.prompt_id">Prompt #{{ task.prompt_id }}</span>
+                                <span>{{ formatTimestamp(task.updated_at) }}</span>
+                              </div>
+                              <p class="human-task-entry__description">
+                                {{ task.descriptionSnippet }}
+                              </p>
+                              <div class="human-task-entry__footer">
+                                <span>Created {{ formatTimestamp(task.created_at) }}</span>
+                                <v-chip
+                                  v-if="task.blocking"
+                                  size="x-small"
+                                  color="error"
+                                  variant="tonal"
+                                  label
+                                >
+                                  Blocking
+                                </v-chip>
+                              </div>
+                            </div>
+                          </div>
+                          <div
+                            v-else
+                            class="human-tasks-panel__empty"
+                          >
+                            No human tasks logged yet — use scripts/human_tasks.py to add blockers.
+                          </div>
+                        </div>
+                        <div class="human-tasks-panel__footer human-tasks-dropdown__footer">
+                          Logged blockers keep operators in the loop. Use <code>scripts/human_tasks.py</code> to add or resolve items.
+                        </div>
+                      </div>
+                    </v-card>
+                  </v-menu>
+                </div>
                 <div class="header-menus">
                   <div v-if="isAuthenticated" class="user-summary">
                     <v-menu location="bottom end" transition="scale-transition">
@@ -4077,83 +4296,6 @@
                           </v-sheet>
                         </div>
                       </v-card-text>
-                      <v-divider />
-                      <div class="human-tasks-panel" data-tour-id="tour-human-tasks">
-                        <div class="human-tasks-panel__header">
-                          <span class="human-tasks-panel__header-title">Human Tasks</span>
-                          <div class="human-tasks-panel__badges">
-                            <v-chip label size="small" variant="tonal" color="warning">
-                              Blocking {{ blockingHumanTaskCount }}
-                            </v-chip>
-                            <v-chip label size="small" variant="tonal" color="primary">
-                              Open {{ openHumanTaskCount }}
-                            </v-chip>
-                            <v-btn
-                              icon="mdi-refresh"
-                              size="small"
-                              variant="text"
-                              :loading="humanTasksLoading"
-                              :disabled="humanTasksLoading"
-                              @click="refreshHumanTasks"
-                              aria-label="Refresh human tasks"
-                            ></v-btn>
-                          </div>
-                        </div>
-                        <div class="human-tasks-panel__body">
-                          <v-alert
-                            v-if="humanTasksError"
-                            type="error"
-                            variant="tonal"
-                            density="comfortable"
-                            border="start"
-                          >
-                            {{ humanTasksError }}
-                          </v-alert>
-                          <v-skeleton-loader
-                            v-else-if="humanTasksLoading && !humanTaskEntries.length"
-                            type="list-item@2"
-                          />
-                          <div v-else-if="humanTaskEntries.length" class="human-tasks-list">
-                            <div v-for="task in humanTaskEntries" :key="task.task_id" class="human-task-entry">
-                              <div class="human-task-entry__header">
-                                <span>{{ task.title }}</span>
-                                <span class="text-caption text-medium-emphasis">
-                                  {{ task.statusDisplay }}
-                                </span>
-                              </div>
-                              <div class="human-task-entry__meta">
-                                <span>{{ task.projectDisplay }}</span>
-                                <span v-if="task.prompt_id">Prompt #{{ task.prompt_id }}</span>
-                                <span>{{ formatTimestamp(task.updated_at) }}</span>
-                              </div>
-                              <p class="human-task-entry__description">
-                                {{ task.descriptionSnippet }}
-                              </p>
-                              <div class="human-task-entry__footer">
-                                <span>Created {{ formatTimestamp(task.created_at) }}</span>
-                                <v-chip
-                                  v-if="task.blocking"
-                                  size="x-small"
-                                  color="error"
-                                  variant="tonal"
-                                  label
-                                >
-                                  Blocking
-                                </v-chip>
-                              </div>
-                            </div>
-                          </div>
-                          <div
-                            v-else
-                            class="human-tasks-panel__empty"
-                          >
-                            No human tasks logged yet — use scripts/human_tasks.py to add blockers.
-                          </div>
-                        </div>
-                        <div class="human-tasks-panel__footer">
-                          Logged blockers keep operators in the loop. Use <code>scripts/human_tasks.py</code> to add or resolve items.
-                        </div>
-                      </div>
                     </v-card>
                   </v-col>
                   <v-col cols="12" md="7" lg="8">
@@ -4269,7 +4411,7 @@
                       <div class="queue-composer" data-tour-id="tour-prompt-composer">
                         <v-textarea
                           v-model="promptText"
-                          placeholder="Type your next instruction to Codex"
+                          placeholder="Type your next instruction to Nightshift"
                           variant="outlined"
                           auto-grow
                           rows="3"
@@ -4396,7 +4538,7 @@
                             </span>
                           </div>
                           <div class="text-caption text-medium-emphasis" v-else>
-                            Select a prompt from the queue to review Codex output.
+                            Select a prompt from the queue to review Nightshift output.
                           </div>
                         </div>
                         <div class="thread-header__actions">
@@ -4637,7 +4779,7 @@
                             </div>
                           </div>
                           <div v-else-if="!showLiveStream" class="text-medium-emphasis text-center py-10">
-                            No Codex output captured for this prompt yet.
+                            No Nightshift output captured for this prompt yet.
                           </div>
                         </template>
                       </div>

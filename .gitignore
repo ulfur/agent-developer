@@ -2,10 +2,7 @@
 __pycache__/
 *.py[cod]
 *.log
-data/.auth_secret
-data/users.json
-data/prompts.json
-data/ssh/
+data/*
 frontend/projects/
 
 projects/*
