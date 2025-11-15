@@ -1,4 +1,4 @@
-"""Utilities for generating and exposing SSH keys for the Agent Dev Host."""
+"""Utilities for generating and exposing SSH keys for Nightshift."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class SSHKeyManager:
         self.keys_dir = self.data_dir / "ssh"
         self.keys_dir.mkdir(parents=True, exist_ok=True)
         self.logger = logger or logging.getLogger(__name__)
-        self._default_comment = f"agent-dev-host@{socket.gethostname() or 'localhost'}"
+        self._default_comment = f"nightshift@{socket.gethostname() or 'localhost'}"
         self._key_specs: List[Dict[str, Any]] = [
             {"type": "ed25519", "filename": "id_ed25519"},
         ]

@@ -24,6 +24,7 @@ class TaskQueueDisplayManager(threading.Thread):
         enabled: bool,
         config: IT8591Config,
         max_items: int = 5,
+        preferences: Any | None = None,
     ):
         super().__init__(daemon=True)
         self.store = store
@@ -31,6 +32,7 @@ class TaskQueueDisplayManager(threading.Thread):
         self.enabled = enabled
         self.config = config
         self.max_items = max_items
+        self.preferences = preferences
         self._queue: "queue.Queue[str]" = queue.Queue(maxsize=2)
         self._stop = threading.Event()
         self._driver: IT8591DisplayDriver | None = None
@@ -106,7 +108,8 @@ class TaskQueueDisplayManager(threading.Thread):
             snapshot = self.store.list_prompts()
             entries = self._build_display_entries(snapshot.get("items", []))
             queue_depth = self.store.pending_count()
-            image = self._renderer.render(entries)
+            invert = self._should_invert_display()
+            image = self._renderer.render(entries, invert=invert)
             self._driver.display_image(image)
             self._last_success = dt.datetime.utcnow()
             self.logger.info(
@@ -127,3 +130,14 @@ class TaskQueueDisplayManager(threading.Thread):
                 enriched["stdout_preview"] = ""
             entries.append(enriched)
         return entries
+
+    def _should_invert_display(self) -> bool:
+        if not self.preferences:
+            return False
+        getter = getattr(self.preferences, "get_theme_mode", None)
+        if not callable(getter):
+            return False
+        try:
+            return getter() == "dark"
+        except Exception:
+            return False

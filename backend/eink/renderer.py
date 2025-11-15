@@ -7,7 +7,7 @@ import socket
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 
 TITLE_FONT_CANDIDATES = (
@@ -33,6 +33,8 @@ class StatusRenderer:
         self.height = height
         self._title_font = self._load_font(size=84, candidates=TITLE_FONT_CANDIDATES)
         self._body_font = self._load_font(size=46, candidates=BODY_FONT_CANDIDATES)
+        self._header_logo = self._render_header_logo(int(self._title_font.size * 1.05))
+        self._logo_text_gap = max(20, self._title_font.size // 4)
         self._margin = 56
         self._text_x = self._margin
         self._detail_indent = "   "
@@ -47,6 +49,8 @@ class StatusRenderer:
     def render(
         self,
         entries: Sequence[Mapping[str, str]],
+        *,
+        invert: bool = False,
     ) -> Image.Image:
         """Return a greyscale PIL image containing queue metadata."""
         canvas = Image.new("L", (self.width, self.height), color=0xFF)
@@ -54,9 +58,7 @@ class StatusRenderer:
         y = self._margin
         content_bottom = max(self._margin + self._body_font.size, self.height - self._margin - self._footer_padding)
 
-        title = "Agent Task Queue"
-        draw.text((self._margin, y), title, font=self._title_font, fill=0x00)
-        y += self._title_font.size + 30
+        y = self._draw_header(canvas, draw, y)
 
         for idx, record in enumerate(entries, start=1):
             if y + self._body_font.size > content_bottom:
@@ -78,6 +80,9 @@ class StatusRenderer:
             right_width = self._measure_text(footer_right, font=self._footer_font)
             right_x = max(self._margin, self.width - self._margin - right_width)
             draw.text((right_x, footer_y), footer_right, font=self._footer_font, fill=0x00)
+
+        if invert:
+            canvas = ImageOps.invert(canvas)
 
         return canvas
 
@@ -187,6 +192,21 @@ class StatusRenderer:
             return target_font.getlength(text)
         return target_font.getsize(text)[0]
 
+    def _draw_header(self, canvas: Image.Image, draw: ImageDraw.ImageDraw, y: int) -> int:
+        title = "Nightshift"
+        logo = self._header_logo
+        if logo:
+            canvas.paste(logo, (self._margin, y))
+            text_x = self._margin + logo.width + self._logo_text_gap
+            text_y = y + max(0, (logo.height - self._title_font.size) // 2)
+            header_height = max(self._title_font.size, logo.height)
+        else:
+            text_x = self._margin
+            text_y = y
+            header_height = self._title_font.size
+        draw.text((text_x, text_y), title, font=self._title_font, fill=0x00)
+        return y + header_height + 30
+
     def _parse_timestamp(self, value: str | None) -> dt.datetime | None:
         if not value:
             return None
@@ -239,3 +259,69 @@ class StatusRenderer:
                 return socket.gethostbyname(socket.gethostname())
             except OSError:
                 return None
+
+    def _render_header_logo(self, base_size: int) -> Image.Image:
+        """Render the simplified fallback mark described in docs/nightshift-logo-spec.md."""
+
+        size = max(48, base_size)
+        scale = size / 36.0
+
+        def px(value: float) -> int:
+            return int(round(value * scale))
+
+        def pt(x: float, y: float) -> tuple[int, int]:
+            return (px(x), px(y))
+
+        tile = Image.new("L", (size, size), color=0xFF)
+        draw = ImageDraw.Draw(tile)
+
+        circle_center = pt(18, 18)
+        circle_radius = px(14)
+        circle_color = 0x2C  # Approximated grayscale of #142d55 for e-ink
+        draw.ellipse(
+            (
+                circle_center[0] - circle_radius,
+                circle_center[1] - circle_radius,
+                circle_center[0] + circle_radius,
+                circle_center[1] + circle_radius,
+            ),
+            fill=circle_color,
+        )
+
+        stroke_width = max(2, px(3))
+        stroke_color = 0xF2
+        n_path = [
+            pt(12, 26),
+            pt(12, 10),
+            pt(18, 26),
+            pt(24, 10),
+            pt(24, 26),
+        ]
+        draw.line(n_path, fill=stroke_color, width=stroke_width, joint="curve")
+
+        cap_radius = max(1, stroke_width // 2)
+        for point in n_path:
+            draw.ellipse(
+                (
+                    point[0] - cap_radius,
+                    point[1] - cap_radius,
+                    point[0] + cap_radius,
+                    point[1] + cap_radius,
+                ),
+                fill=stroke_color,
+            )
+
+        moon_center = pt(12, 8)
+        moon_radius = max(2, px(3))
+        moon_color = 0xCC  # Approximation of the golden crescent
+        draw.ellipse(
+            (
+                moon_center[0] - moon_radius,
+                moon_center[1] - moon_radius,
+                moon_center[0] + moon_radius,
+                moon_center[1] + moon_radius,
+            ),
+            fill=moon_color,
+        )
+
+        return tile

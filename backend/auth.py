@@ -1,4 +1,4 @@
-"""Lightweight authentication helpers for the Agent Dev Host backend."""
+"""Lightweight authentication helpers for the Nightshift backend."""
 
 from __future__ import annotations
 

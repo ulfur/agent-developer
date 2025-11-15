@@ -9,4 +9,4 @@
 - Static Vue3 + Vuetify frontend (`frontend/index.html`) for prompt submission and monitoring.
 - Added `agents.md`, JSON persistence (`data/prompts.json`), and logging scaffolding under `logs/`.
 - Added manual retry endpoint/UI button plus CLI invocation fixes (`--skip-git-repo-check`).
-- Added user-level systemd unit (`agent-dev-host.service`) and env file for Codex/e-ink configuration; logs now redirect to `logs/backend.stdout.log` / `backend.stderr.log`.
+- Added user-level systemd unit (`nightshift.service`) and env file for Codex/e-ink configuration; logs now redirect to `logs/backend.stdout.log` / `backend.stderr.log`.

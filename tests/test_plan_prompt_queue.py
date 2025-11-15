@@ -1,7 +1,10 @@
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.plan_prompt_queue import PromptQueue, UpgradePlan, queue_plan_tasks
 
@@ -33,9 +36,9 @@ class PlanPromptQueueTests(unittest.TestCase):
 
     def test_queue_plan_tasks_updates_prompts_file_and_plan(self) -> None:
         tasks = [
-            {"id": "a", "title": "Task A", "prompt": "Do something A", "project_id": "agent-dev-host", "status": "pending"},
-            {"id": "b", "title": "Task B", "prompt": "Do something B", "project_id": "agent-dev-host", "status": "pending"},
-            {"id": "c", "title": "Task C", "prompt": "Do something C", "project_id": "agent-dev-host", "status": "pending"},
+            {"id": "a", "title": "Task A", "prompt": "Do something A", "project_id": "nightshift", "status": "pending"},
+            {"id": "b", "title": "Task B", "prompt": "Do something B", "project_id": "nightshift", "status": "pending"},
+            {"id": "c", "title": "Task C", "prompt": "Do something C", "project_id": "nightshift", "status": "pending"},
         ]
         plan_path = self._write_plan(tasks)
         prompts_path = self.temp_path / "prompts.json"
@@ -51,7 +54,7 @@ class PlanPromptQueueTests(unittest.TestCase):
         for record in prompts_data.values():
             self.assertEqual(record["status"], "queued")
             self.assertTrue(record["log_path"].startswith(str(logs_dir)))
-            self.assertEqual(record["project_id"], "agent-dev-host")
+            self.assertEqual(record["project_id"], "nightshift")
 
         updated_plan = json.loads(plan_path.read_text(encoding="utf-8"))
         queued_tasks = [task for task in updated_plan["tasks"] if task["status"] == "queued"]

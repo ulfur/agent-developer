@@ -2,9 +2,21 @@
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
-    <title>Codex Nova</title>
+    <title>Nightshift</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" href="./logo.svg" type="image/svg+xml" />
+    <link
+      rel="icon"
+      href="./nightshift-favicon-dark.png"
+      type="image/png"
+      sizes="256x256"
+      data-nightshift-favicon="png"
+    />
+    <link
+      rel="alternate icon"
+      href="./nightshift-favicon-dark.ico"
+      type="image/x-icon"
+      data-nightshift-favicon="ico"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" />
@@ -343,91 +355,6 @@
         font-weight: 600;
       }
 
-      .queue-health-card {
-        padding: 1rem 1.5rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        background-color: var(--stream-bg);
-      }
-
-      .queue-health-card__header {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .queue-health-card__status {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.4rem;
-      }
-
-      .queue-health-chip {
-        font-weight: 600;
-        text-transform: none;
-      }
-
-      .queue-health-card__ages {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 0.75rem;
-      }
-
-      .queue-health-age {
-        border: 1px solid var(--card-border);
-        border-radius: 10px;
-        padding: 0.5rem 0.75rem;
-        background-color: var(--prompt-bubble-bg);
-      }
-
-      .queue-health-age__label {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--text-muted);
-      }
-
-      .queue-health-age__value {
-        font-weight: 600;
-        font-size: 0.95rem;
-        display: block;
-        margin-top: 0.25rem;
-      }
-
-      .queue-health-card__durations {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 0.75rem;
-      }
-
-      .queue-health-duration {
-        border: 1px solid var(--card-border);
-        border-radius: 10px;
-        padding: 0.5rem 0.75rem;
-        background-color: var(--app-surface);
-      }
-
-      .queue-health-duration__label {
-        font-size: 0.8rem;
-        color: var(--text-muted);
-      }
-
-      .queue-health-duration__value {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 0.35rem;
-        font-weight: 600;
-        margin-top: 0.25rem;
-      }
-
-      .queue-health-duration__value .duration-max {
-        font-size: 0.8rem;
-        font-weight: 500;
-        color: var(--text-muted);
-      }
-
       .queue-scroll {
         flex: 1 1 auto;
         min-height: 0;
@@ -436,6 +363,100 @@
         flex-direction: column;
         gap: 0.85rem;
         padding: 1.25rem 1.5rem;
+      }
+
+      .human-tasks-panel {
+        padding: 1.25rem 1.5rem 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+      }
+
+      .human-tasks-panel__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .human-tasks-panel__header-title {
+        font-weight: 600;
+        font-size: 1rem;
+      }
+
+      .human-tasks-panel__badges {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .human-tasks-panel__body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .human-tasks-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        max-height: 260px;
+        overflow-y: auto;
+      }
+
+      .human-task-entry {
+        border: 1px solid var(--card-border);
+        border-radius: 12px;
+        padding: 0.85rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        background-color: var(--app-surface);
+      }
+
+      .human-task-entry__header {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.5rem;
+        align-items: center;
+        font-weight: 600;
+      }
+
+      .human-task-entry__meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+
+      .human-task-entry__description {
+        margin: 0;
+        font-size: 0.9rem;
+        color: var(--text-primary);
+      }
+
+      .human-task-entry__footer {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+
+      .human-tasks-panel__empty {
+        text-align: center;
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        padding: 0.75rem 0;
+      }
+
+      .human-tasks-panel__footer {
+        font-size: 0.8rem;
+        color: var(--text-muted);
       }
 
       .queue-list {
@@ -861,6 +882,14 @@
         padding-inline-end: 1.25rem;
       }
 
+      .global-header__branding {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
       .global-header__home-link {
         font: inherit;
         color: inherit;
@@ -890,7 +919,7 @@
       }
 
       .global-header__title {
-        font-size: 1.2rem;
+        font-size: 1.35rem;
         font-weight: 600;
         letter-spacing: 0.01em;
       }
@@ -972,7 +1001,6 @@
         gap: 0.75rem;
       }
 
-      .projects-menu__activator,
       .user-menu__activator {
         text-transform: none;
         display: flex;
@@ -982,45 +1010,8 @@
         font-weight: 600;
       }
 
-      .projects-menu__activator {
-        letter-spacing: 0.02em;
-      }
-
-      .projects-menu__activator .mdi,
       .user-menu__activator .mdi {
         font-size: 18px;
-      }
-
-      .projects-menu-card {
-        min-width: 260px;
-        max-width: 320px;
-        width: min(320px, calc(100vw - 24px));
-      }
-
-      .projects-menu__item {
-        align-items: flex-start;
-      }
-
-      .projects-menu__subtitle {
-        white-space: normal;
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        line-height: 1.35;
-        max-height: calc(1.35em * 2);
-        overflow-wrap: anywhere;
-      }
-
-      .project-focus-badge {
-        width: 10px;
-        height: 10px;
-        border-radius: 999px;
-        background-color: #3b82f6;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
-        display: inline-flex;
-        flex-shrink: 0;
-        margin-left: 0.5rem;
       }
 
       .project-selector {
@@ -1033,6 +1024,30 @@
       .project-selector__hint {
         font-size: 0.85rem;
         color: var(--text-muted);
+      }
+
+      .project-selector__live-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-weight: 500;
+        color: var(--text-primary);
+        text-decoration: none;
+      }
+
+      .project-selector__live-link .mdi {
+        font-size: 1rem;
+        opacity: 0.8;
+      }
+
+      .project-selector__live-link:focus-visible {
+        outline: 2px solid rgba(96, 165, 250, 0.5);
+        outline-offset: 2px;
+      }
+
+      .project-selector__live-link--disabled {
+        color: var(--text-muted);
+        cursor: default;
       }
 
       .prompt-project-pill {
@@ -1051,9 +1066,56 @@
       .chat-card-title__heading {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 0.35rem;
         font-size: 1rem;
         font-weight: 500;
+        width: 100%;
+      }
+
+      .chat-card-title__task {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+      }
+
+      .chat-card-title__cancel,
+      .chat-card-title__delete {
+        flex-shrink: 0;
+      }
+
+      .chat-card-subtitle {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .chat-card-subtitle__attempts {
+        margin-right: auto;
+      }
+
+      .task-id-button {
+        border: none;
+        background: none;
+        color: inherit;
+        font: inherit;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        cursor: pointer;
+      }
+
+      .task-id-button .mdi {
+        font-size: 0.95rem;
+      }
+
+      .task-id-button:focus-visible {
+        outline: 2px solid #60a5fa;
+        outline-offset: 2px;
+        border-radius: 6px;
       }
 
       .login-container {
@@ -1106,6 +1168,20 @@
       .guided-tour-trigger {
         text-transform: none;
         font-weight: 600;
+        font-size: 0.6rem;
+        padding: 0.02rem 0.35rem;
+        min-height: 20px;
+        border-radius: 999px;
+        align-self: center;
+        letter-spacing: 0.02em;
+      }
+
+      .guided-tour-trigger .v-btn__prepend {
+        margin-right: 0.25rem;
+      }
+
+      .guided-tour-trigger .v-btn__prepend .v-icon {
+        font-size: 0.85rem;
       }
 
       .guided-tour-overlay {
@@ -1241,23 +1317,13 @@
       const PROMPT_AVERAGE_WINDOW = 20;
       const PROMPT_DURATION_STATUSES = new Set(['completed', 'failed', 'canceled']);
       const MOBILE_BREAKPOINT = 960;
-      const HEALTH_DURATION_WINDOW = 50;
-      const HEALTH_WAIT_THRESHOLD_SECONDS = 60;
-      const HEALTH_RUN_THRESHOLD_SECONDS = 600;
-      const HEALTH_STATUS_CHIPS = [
-        { key: 'queued', label: 'Queued', color: 'primary' },
-        { key: 'running', label: 'Running', color: 'info' },
-        { key: 'completed', label: 'Completed', color: 'success' },
-        { key: 'failed', label: 'Failed', color: 'error' },
-        { key: 'canceled', label: 'Canceled', color: 'warning' },
-      ];
       const GUIDED_TOUR_PADDING = 16;
       const GUIDED_TOUR_STEPS = [
         {
           id: 'project-focus',
           target: '[data-tour-id=\"tour-project-selector\"]',
           title: 'Focus Codex on the right project',
-          description: 'Pick which project Codex should care about. The focused project scopes prompts, context, and launch links.',
+          description: 'Pick which project Codex should care about. This choice scopes prompts, context, and launch links.',
         },
         {
           id: 'prompt-composer',
@@ -1268,8 +1334,14 @@
         {
           id: 'prompt-queue',
           target: '[data-tour-id=\"tour-queue-list\"]',
-          title: 'Track the prompt queue',
+          title: 'Track the Task queue',
           description: 'Each entry shows status, timing, and a quick summary so you can jump into any task while it runs.',
+        },
+        {
+          id: 'human-task-queue',
+          target: '[data-tour-id=\"tour-human-tasks\"]',
+          title: 'Spot blockers fast',
+          description: 'Human Tasks capture anything that needs an operator. Add blockers via the CLI and monitor them here.',
         },
         {
           id: 'prompt-thread',
@@ -1278,6 +1350,45 @@
           description: 'The thread view holds your prompt, live stdout/stderr, and prior attempts—plus controls to edit, cancel, or retry.',
         },
       ];
+      const HUMAN_TASK_STATUS_LABELS = {
+        open: 'Open',
+        in_progress: 'In progress',
+        resolved: 'Resolved',
+      };
+      const HUMAN_TASK_STATUS_ORDER = {
+        open: 0,
+        in_progress: 1,
+        resolved: 2,
+      };
+
+      const HEADER_ICON_SOURCES = {
+        dark: './nightshift-header-dark.png',
+        light: './nightshift-header-light.png',
+      };
+      const FAVICON_SOURCES = {
+        dark: {
+          png: {
+            href: './nightshift-favicon-dark.png',
+            type: 'image/png',
+            sizes: '256x256',
+          },
+          ico: {
+            href: './nightshift-favicon-dark.ico',
+            type: 'image/x-icon',
+          },
+        },
+        light: {
+          png: {
+            href: './nightshift-favicon-light.png',
+            type: 'image/png',
+            sizes: '256x256',
+          },
+          ico: {
+            href: './nightshift-favicon-light.ico',
+            type: 'image/x-icon',
+          },
+        },
+      };
 
       const createApiClient = (getToken, onUnauthorized) => {
         return async (path, options = {}) => {
@@ -1356,17 +1467,23 @@
           const promptText = ref('');
           const queue = ref([]);
           const selectedPrompt = ref(null);
+          const nowTick = ref(Date.now());
           const loading = ref(true);
           const submitting = ref(false);
+          const headerIconRequesting = ref(false);
           const health = ref(null);
           const operationsLog = ref('');
           const logLoading = ref(false);
           const logError = ref('');
           const logLastUpdated = ref('');
+          const humanTasks = ref([]);
+          const humanTasksSummary = ref({});
+          const humanTasksError = ref('');
+          const humanTasksLoading = ref(false);
+          const humanTasksRevision = ref(null);
           const retrying = ref(false);
           const canceling = ref(false);
           const restarting = ref(false);
-          const deletePromptLoading = ref(false);
           const promptStreams = reactive({});
           const editPromptDialogVisible = ref(false);
           const editPromptText = ref('');
@@ -1381,6 +1498,7 @@
           const reconnectAttempts = ref(0);
           const theme = useTheme();
           const themeMode = ref('dark');
+          const headerIconSrc = computed(() => HEADER_ICON_SOURCES[themeMode.value] || HEADER_ICON_SOURCES.dark);
           const route = useRoute();
           const router = useRouter();
           const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'long' });
@@ -1398,6 +1516,7 @@
           let chatThreadResizeObserver = null;
           let reconnectTimer = null;
           let logRefreshTimer = null;
+          let elapsedTimer = null;
           let manualRealtimeClose = false;
           const authToken = ref('');
           const currentUser = ref(null);
@@ -1506,13 +1625,14 @@
             router.push({ name: 'queue' }).catch(() => {});
           };
 
-          const openProject = (project) => {
-            if (!project || !project.launch_url) {
-              return;
+          const handleHeaderIconClick = (event) => {
+            if (event?.preventDefault) {
+              event.preventDefault();
             }
-            if (typeof window !== 'undefined') {
-              window.open(project.launch_url, '_blank', 'noopener,noreferrer');
+            if (isAuthenticated.value) {
+              queueHeaderIconRefreshTask();
             }
+            goHome();
           };
 
           const showQueuePanel = () => {
@@ -1813,6 +1933,7 @@
               }
               case 'health':
                 health.value = payload;
+                applyHumanTaskMetrics(payload?.metrics?.human_tasks);
                 break;
               case 'prompt_stream':
                 handleStreamPayload(payload);
@@ -1920,6 +2041,11 @@
             restarting.value = false;
             persistToken('');
             clearRoutePrompt();
+            humanTasks.value = [];
+            humanTasksSummary.value = {};
+            humanTasksRevision.value = null;
+            humanTasksError.value = '';
+            humanTasksLoading.value = false;
             if (message) {
               loginError.value = message;
             }
@@ -1974,19 +2100,12 @@
             return `${minutes}m ${remainingSeconds.toString().padStart(2, '0')}s`;
           };
 
-          const describeOldestHealthEntry = (entry) => {
-            if (!entry) {
-              return { text: 'No prompts', title: '' };
+          const formatHumanTaskStatus = (status) => {
+            if (!status) {
+              return 'Unknown';
             }
-            const promptId = entry.prompt_id ? `#${entry.prompt_id.slice(0, 8)}` : 'Prompt';
-            const ageSeconds =
-              typeof entry.age_seconds === 'number' && Number.isFinite(entry.age_seconds) ? entry.age_seconds : null;
-            const ageText = ageSeconds != null ? `${formatQueueDuration(ageSeconds)} old` : 'Age unknown';
-            const timestampText = entry.timestamp ? formatTimestamp(entry.timestamp) : '';
-            return {
-              text: `${promptId} · ${ageText}`,
-              title: timestampText,
-            };
+            const normalized = String(status).toLowerCase();
+            return HUMAN_TASK_STATUS_LABELS[normalized] || status;
           };
 
           const normalizeWhitespace = (value) => {
@@ -2333,7 +2452,7 @@
             return projectLookup.value.get(id) || null;
           });
 
-          const activeProjectDescription = computed(() => activeProject.value?.description || '');
+          const activeProjectLaunchUrl = computed(() => activeProject.value?.launch_url || '');
 
           const selectedPromptProject = computed(() => {
             const prompt = selectedPrompt.value;
@@ -2384,51 +2503,69 @@
             if (stream?.started_at) {
               return stream.started_at;
             }
+            if (selectedPrompt.value?.live_stream?.started_at) {
+              return selectedPrompt.value.live_stream.started_at;
+            }
+            if (selectedPrompt.value?.started_at) {
+              return selectedPrompt.value.started_at;
+            }
             return selectedPrompt.value?.updated_at || selectedPrompt.value?.created_at || null;
           });
 
           const liveAttemptDurationSeconds = computed(() => {
             const stream = activeStream.value;
-            if (!stream) {
-              return null;
-            }
             const start = liveAttemptReceivedAt.value;
-            if (!start || !stream.updated_at) {
+            if (!start) {
               return null;
             }
-            return computeRuntimeSeconds(start, stream.updated_at);
+            const status = (selectedPrompt.value?.status || '').toLowerCase();
+            if (status === 'running') {
+              return computeRuntimeSeconds(start, nowTick.value);
+            }
+            if (stream?.updated_at) {
+              return computeRuntimeSeconds(start, stream.updated_at);
+            }
+            if (selectedPrompt.value?.updated_at) {
+              return computeRuntimeSeconds(start, selectedPrompt.value.updated_at);
+            }
+            return null;
           });
 
           const queueEntries = computed(() => {
             const lookup = projectLookup.value;
             const focusProjectId = activeProjectId.value;
+            const nowMs = nowTick.value;
             return queue.value
               .map((item, index) => {
                 const status = (item.status || '').toLowerCase();
                 const isCompleted = status === 'completed';
                 const isFailed = status === 'failed';
                 const isCanceled = status === 'canceled';
-                const runtimeSeconds =
-                isCompleted || isFailed || isCanceled
-                  ? computeRuntimeSeconds(item.created_at, item.updated_at)
-                  : null;
-              let detailSource = item.text || '';
-              if (isCompleted) {
-                detailSource = item.stdout_preview || item.result_summary || '';
-              } else if (isCanceled) {
-                detailSource = item.result_summary || 'Prompt canceled by user';
-              }
-              const normalizedDetail = normalizeWhitespace(detailSource);
-              const placeholder = isCompleted
-                ? 'Stdout unavailable'
-                : isCanceled
-                  ? 'Prompt canceled'
-                  : 'Prompt unavailable';
-              const detailLimit = isMobileLayout.value ? QUEUE_DETAIL_MOBILE_MAX : QUEUE_DETAIL_MAX;
-              const detail =
-                normalizedDetail.length > detailLimit
-                  ? `${normalizedDetail.slice(0, detailLimit - 1)}…`
-                  : normalizedDetail || placeholder;
+                const isRunning = isRunningStatus(status);
+                let runtimeSeconds = null;
+                if (isCompleted || isFailed || isCanceled) {
+                  runtimeSeconds = computeRuntimeSeconds(item.created_at, item.updated_at);
+                } else if (isRunning) {
+                  const runningStart = item.started_at || item.updated_at || item.created_at;
+                  runtimeSeconds = computeRuntimeSeconds(runningStart, nowMs);
+                }
+                let detailSource = item.text || '';
+                if (isCompleted) {
+                  detailSource = item.stdout_preview || item.result_summary || '';
+                } else if (isCanceled) {
+                  detailSource = item.result_summary || 'Prompt canceled by user';
+                }
+                const normalizedDetail = normalizeWhitespace(detailSource);
+                const placeholder = isCompleted
+                  ? 'Stdout unavailable'
+                  : isCanceled
+                    ? 'Prompt canceled'
+                    : 'Prompt unavailable';
+                const detailLimit = isMobileLayout.value ? QUEUE_DETAIL_MOBILE_MAX : QUEUE_DETAIL_MAX;
+                const detail =
+                  normalizedDetail.length > detailLimit
+                    ? `${normalizedDetail.slice(0, detailLimit - 1)}…`
+                    : normalizedDetail || placeholder;
                 const entryProjectId = item.project?.id || item.project_id || null;
                 if (focusProjectId && entryProjectId !== focusProjectId) {
                   return null;
@@ -2473,6 +2610,50 @@
             return Number.isFinite(average) ? average : null;
           });
 
+          const humanTaskEntries = computed(() => {
+            const entries = humanTasks.value.map((task) => {
+              const normalizedStatus = (task?.status || '').toLowerCase();
+              const projectName =
+                task?.project?.name ||
+                task?.project?.id ||
+                task?.project_id ||
+                (task?.project && typeof task.project === 'string' ? task.project : '') ||
+                'Unscoped';
+              const description = normalizeWhitespace(task?.description || '');
+              const snippet = description.length > 220 ? `${description.slice(0, 219)}…` : description;
+              return {
+                ...task,
+                statusDisplay: formatHumanTaskStatus(normalizedStatus || task?.status),
+                projectDisplay: projectName,
+                descriptionSnippet: snippet || 'No description provided.',
+              };
+            });
+            return entries.sort((a, b) => {
+              if (a.blocking !== b.blocking) {
+                return a.blocking ? -1 : 1;
+              }
+              const statusRankA = HUMAN_TASK_STATUS_ORDER[a.status] ?? 99;
+              const statusRankB = HUMAN_TASK_STATUS_ORDER[b.status] ?? 99;
+              if (statusRankA !== statusRankB) {
+                return statusRankA - statusRankB;
+              }
+              if (a.created_at && b.created_at) {
+                return a.created_at.localeCompare(b.created_at);
+              }
+              return 0;
+            });
+          });
+
+          const blockingHumanTaskCount = computed(() => {
+            const summary = humanTasksSummary.value || {};
+            return summary.blocking_count || 0;
+          });
+
+          const openHumanTaskCount = computed(() => {
+            const counts = (humanTasksSummary.value && humanTasksSummary.value.status_counts) || {};
+            return counts.open || 0;
+          });
+
           const averagePromptDurationDisplay = computed(() => {
             const seconds = averagePromptDurationSeconds.value;
             if (seconds == null) {
@@ -2481,77 +2662,6 @@
             return formatQueueDuration(seconds);
           });
 
-          const healthMetrics = computed(() => (health.value && health.value.metrics) || null);
-
-          const healthStatusChips = computed(() => {
-            const metrics = healthMetrics.value;
-            if (!metrics) {
-              return [];
-            }
-            const counts = metrics.status_counts || {};
-            return HEALTH_STATUS_CHIPS.map((chip) => ({
-              ...chip,
-              count: counts?.[chip.key] ?? 0,
-            }));
-          });
-
-          const healthDurationStats = computed(() => (healthMetrics.value && healthMetrics.value.durations) || null);
-
-          const healthSampleSummary = computed(() => {
-            const durations = healthDurationStats.value;
-            if (!durations) {
-              return 'No recent samples';
-            }
-            const samples = durations.samples ?? 0;
-            const window = durations.window ?? HEALTH_DURATION_WINDOW;
-            if (!samples) {
-              return `Awaiting ${window} samples`;
-            }
-            return `Last ${samples} of ${window}`;
-          });
-
-          const oldestQueuedInfo = computed(() => describeOldestHealthEntry(healthMetrics.value?.oldest?.queued));
-          const oldestRunningInfo = computed(() => describeOldestHealthEntry(healthMetrics.value?.oldest?.running));
-
-          const waitDurationSummary = computed(() => {
-            const waitStats = healthDurationStats.value?.wait;
-            if (!waitStats) {
-              return '—';
-            }
-            const average = formatDuration(waitStats.average);
-            const max = formatDuration(waitStats.max);
-            return `${average} avg · ${max} max`;
-          });
-
-          const runDurationSummary = computed(() => {
-            const runStats = healthDurationStats.value?.run;
-            if (!runStats) {
-              return '—';
-            }
-            const average = formatDuration(runStats.average);
-            const max = formatDuration(runStats.max);
-            return `${average} avg · ${max} max`;
-          });
-
-          const waitThresholdExceeded = computed(() => {
-            const waitStats = healthDurationStats.value?.wait;
-            if (!waitStats || waitStats.max == null) {
-              return false;
-            }
-            return waitStats.max >= HEALTH_WAIT_THRESHOLD_SECONDS;
-          });
-
-          const runThresholdExceeded = computed(() => {
-            const runStats = healthDurationStats.value?.run;
-            if (!runStats || runStats.max == null) {
-              return false;
-            }
-            return runStats.max >= HEALTH_RUN_THRESHOLD_SECONDS;
-          });
-
-          const waitSampleCount = computed(() => healthDurationStats.value?.wait?.count ?? 0);
-          const runSampleCount = computed(() => healthDurationStats.value?.run?.count ?? 0);
-
           const canEditSelectedPrompt = computed(() => {
             if (!selectedPrompt.value) {
               return false;
@@ -2559,12 +2669,15 @@
             return (selectedPrompt.value.status || '').toLowerCase() === 'queued';
           });
 
-          const canDeleteSelectedPrompt = computed(() => canEditSelectedPrompt.value);
           const canCancelSelectedPrompt = computed(() => {
             if (!selectedPrompt.value) {
               return false;
             }
-            return isRunningStatus(selectedPrompt.value.status);
+            const status = (selectedPrompt.value.status || '').toLowerCase();
+            if (status === 'queued') {
+              return true;
+            }
+            return isRunningStatus(status);
           });
           const canRestartSelectedPrompt = computed(() => {
             if (!selectedPrompt.value) {
@@ -2798,6 +2911,7 @@
               if (authed) {
                 fetchProgressLog();
                 startLogRefresh();
+                fetchHumanTasks({ silent: true }).catch(() => {});
               } else {
                 stopLogRefresh();
                 operationsLog.value = '';
@@ -2806,6 +2920,11 @@
                 logLoading.value = false;
                 activeView.value = 'queue';
                 resetSettingsState();
+                humanTasks.value = [];
+                humanTasksSummary.value = {};
+                humanTasksRevision.value = null;
+                humanTasksError.value = '';
+                humanTasksLoading.value = false;
               }
             },
             { immediate: true }
@@ -2872,6 +2991,44 @@
             }
           };
 
+          const fetchHumanTasks = async (options = {}) => {
+            if (!isAuthenticated.value) {
+              return;
+            }
+            const { silent = false } = options;
+            if (!silent) {
+              humanTasksLoading.value = true;
+            }
+            humanTasksError.value = '';
+            try {
+              const data = await api('/api/human_tasks');
+              const items = Array.isArray(data?.tasks) ? data.tasks : [];
+              humanTasks.value = items;
+              if (data?.summary) {
+                humanTasksSummary.value = data.summary;
+              }
+              const revisionValue =
+                typeof data?.revision === 'number'
+                  ? data.revision
+                  : typeof data?.summary?.revision === 'number'
+                    ? data.summary.revision
+                    : null;
+              if (revisionValue != null) {
+                humanTasksRevision.value = revisionValue;
+              }
+            } catch (error) {
+              humanTasksError.value = error.message || 'Unable to load human tasks';
+            } finally {
+              if (!silent) {
+                humanTasksLoading.value = false;
+              }
+            }
+          };
+
+          const refreshHumanTasks = () => {
+            fetchHumanTasks().catch(() => {});
+          };
+
           const fetchHealth = async () => {
             if (!isAuthenticated.value) {
               return;
@@ -2882,8 +3039,32 @@
               if (data?.user) {
                 currentUser.value = data.user;
               }
+              applyHumanTaskMetrics(data?.metrics?.human_tasks);
             } catch (error) {
               console.error(error);
+            }
+          };
+
+          const applyHumanTaskMetrics = (metrics) => {
+            if (!metrics || typeof metrics !== 'object') {
+              return;
+            }
+            humanTasksSummary.value = { ...metrics };
+            const revision = typeof metrics.revision === 'number' ? metrics.revision : null;
+            if (!isAuthenticated.value) {
+              return;
+            }
+            if (revision == null) {
+              return;
+            }
+            if (humanTasksRevision.value == null) {
+              humanTasksRevision.value = revision;
+              fetchHumanTasks({ silent: true }).catch(() => {});
+              return;
+            }
+            if (revision !== humanTasksRevision.value) {
+              humanTasksRevision.value = revision;
+              fetchHumanTasks({ silent: true }).catch(() => {});
             }
           };
 
@@ -3026,6 +3207,41 @@
             }
           };
 
+          const queueHeaderIconRefreshTask = async () => {
+            if (!isAuthenticated.value || headerIconRequesting.value) {
+              return false;
+            }
+            headerIconRequesting.value = true;
+            const prompt = [
+              'Design refreshed Nightshift header icon and favicon assets.',
+              'Match the geometric neon style from frontend/logo.svg and frontend/favicon.svg, maintaining the dark theme palette.',
+              'Deliver SVG files for a 36x36 header icon and a 32x32 favicon, along with guidance on colors, stroke weights, spacing, and any simplified fallback marks.',
+              'Explain how to drop the new assets into the existing Vue/Vuetify header without additional layout changes.',
+            ].join(' ');
+            try {
+              const payload = { prompt };
+              if (activeProjectId.value) {
+                payload.project_id = activeProjectId.value;
+              }
+              const response = await api('/api/prompts', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+              });
+              if (response?.prompt_id) {
+                await selectPrompt({ prompt_id: response.prompt_id });
+              }
+              if (!realtimeReady.value) {
+                await fetchPrompts({ silent: true });
+              }
+              return true;
+            } catch (error) {
+              alert(error.message || 'Unable to queue the branding refresh task');
+              return false;
+            } finally {
+              headerIconRequesting.value = false;
+            }
+          };
+
           const handleComposerKeydown = (event) => {
             if (event.shiftKey) {
               return;
@@ -3119,17 +3335,38 @@
             if (canceling.value) {
               return;
             }
+            const status = (selectedPrompt.value.status || '').toLowerCase();
+            if (status === 'queued') {
+              const confirmed =
+                typeof window === 'undefined' ? true : window.confirm('Cancel this queued prompt?');
+              if (!confirmed) {
+                return;
+              }
+            }
             canceling.value = true;
+            const promptId = selectedPrompt.value.prompt_id;
             try {
-              await api(`/api/prompts/${selectedPrompt.value.prompt_id}/cancel`, {
-                method: 'POST',
-                body: JSON.stringify({ restart: false }),
-              });
+              if (status === 'queued') {
+                await api(`/api/prompts/${promptId}`, { method: 'DELETE' });
+                const index = queue.value.findIndex((entry) => entry.prompt_id === promptId);
+                if (index !== -1) {
+                  queue.value.splice(index, 1);
+                }
+                clearStreamState(promptId);
+                selectedPrompt.value = null;
+                router.replace({ name: 'queue' }).catch(() => {});
+              } else {
+                await api(`/api/prompts/${promptId}/cancel`, {
+                  method: 'POST',
+                  body: JSON.stringify({ restart: false }),
+                });
+              }
               if (!realtimeReady.value) {
                 await fetchPrompts({ silent: true });
               }
             } catch (error) {
-              alert(error.message || 'Unable to cancel prompt');
+              const fallbackMessage = status === 'queued' ? 'Unable to delete prompt' : 'Unable to cancel prompt';
+              alert(error.message || fallbackMessage);
             } finally {
               canceling.value = false;
             }
@@ -3199,39 +3436,6 @@
             }
           };
 
-          const deleteSelectedPrompt = async () => {
-            if (!isAuthenticated.value || !canDeleteSelectedPrompt.value || !selectedPrompt.value) {
-              return;
-            }
-            if (deletePromptLoading.value) {
-              return;
-            }
-            const confirmed =
-              typeof window === 'undefined' ? true : window.confirm('Delete this queued prompt?');
-            if (!confirmed) {
-              return;
-            }
-            const promptId = selectedPrompt.value.prompt_id;
-            deletePromptLoading.value = true;
-            try {
-              await api(`/api/prompts/${promptId}`, { method: 'DELETE' });
-              const index = queue.value.findIndex((entry) => entry.prompt_id === promptId);
-              if (index !== -1) {
-                queue.value.splice(index, 1);
-              }
-              clearStreamState(promptId);
-              selectedPrompt.value = null;
-              router.replace({ name: 'queue' }).catch(() => {});
-              if (!realtimeReady.value) {
-                await fetchPrompts({ silent: true });
-              }
-            } catch (error) {
-              alert(error.message || 'Unable to delete prompt');
-            } finally {
-              deletePromptLoading.value = false;
-            }
-          };
-
           const login = async () => {
             const email = loginEmail.value.trim();
             if (loginLoading.value) {
@@ -3263,6 +3467,7 @@
               connectRealtime();
               await fetchPrompts();
               await fetchHealth();
+              await fetchHumanTasks();
             } catch (error) {
               handleUnauthorized();
               loginError.value = error.message || 'Unable to sign in';
@@ -3281,12 +3486,56 @@
             loginError.value = '';
           };
 
+          const persistThemePreference = async (mode) => {
+            const normalized = mode === 'dark' ? 'dark' : mode === 'light' ? 'light' : '';
+            if (!normalized || typeof fetch === 'undefined') {
+              return;
+            }
+            const headers = { 'Content-Type': 'application/json' };
+            if (authToken.value) {
+              headers.Authorization = `Bearer ${authToken.value}`;
+            }
+            try {
+              await fetch('/api/preferences/theme', {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({ mode: normalized }),
+              });
+            } catch (error) {
+              console.warn('Unable to sync server theme preference', error);
+            }
+          };
+
+          const updateFaviconLinks = (mode) => {
+            if (typeof document === 'undefined') {
+              return;
+            }
+            const sources = FAVICON_SOURCES[mode] || FAVICON_SOURCES.dark;
+            Object.entries(sources).forEach(([variant, config]) => {
+              if (!config) {
+                return;
+              }
+              const link = document.querySelector(`link[data-nightshift-favicon='${variant}']`);
+              if (!link) {
+                return;
+              }
+              link.setAttribute('href', config.href);
+              link.setAttribute('type', config.type);
+              if (config.sizes) {
+                link.setAttribute('sizes', config.sizes);
+              } else {
+                link.removeAttribute('sizes');
+              }
+            });
+          };
+
           const applyTheme = (mode) => {
             themeMode.value = mode;
             theme.global.name.value = mode;
             if (typeof document !== 'undefined') {
               document.documentElement.setAttribute('data-theme', mode);
             }
+            updateFaviconLinks(mode);
             if (typeof window !== 'undefined' && window.localStorage) {
               try {
                 window.localStorage.setItem(THEME_STORAGE_KEY, mode);
@@ -3294,6 +3543,7 @@
                 console.warn('Unable to persist theme preference', error);
               }
             }
+            persistThemePreference(mode);
           };
 
           const initTheme = () => {
@@ -3318,6 +3568,11 @@
 
           onMounted(async () => {
             initTheme();
+            if (!elapsedTimer) {
+              elapsedTimer = setInterval(() => {
+                nowTick.value = Date.now();
+              }, 1000);
+            }
             fetchProjects().catch(() => {});
             if (typeof window !== 'undefined') {
               updateViewportWidth();
@@ -3332,6 +3587,7 @@
                   connectRealtime();
                   await fetchPrompts({ silent: true });
                   await fetchHealth();
+                  await fetchHumanTasks({ silent: true });
                   loading.value = false;
                   return;
                 }
@@ -3345,6 +3601,10 @@
           onUnmounted(() => {
             disconnectRealtime({ manual: true });
             stopLogRefresh();
+            if (elapsedTimer) {
+              clearInterval(elapsedTimer);
+              elapsedTimer = null;
+            }
             if (chatThreadResizeObserver) {
               chatThreadResizeObserver.disconnect();
               chatThreadResizeObserver = null;
@@ -3362,10 +3622,9 @@
             averagePromptDurationDisplay,
             projectOptions,
             selectedProjectId,
-            activeProjectDescription,
+            activeProjectLaunchUrl,
             activeProjectId,
             canEditSelectedPrompt,
-            canDeleteSelectedPrompt,
             canRestartSelectedPrompt,
             selectedPrompt,
             isMobileLayout,
@@ -3373,21 +3632,15 @@
             loading,
             submitting,
             health,
-            healthMetrics,
-            healthStatusChips,
-            healthSampleSummary,
-            oldestQueuedInfo,
-            oldestRunningInfo,
-            waitDurationSummary,
-            runDurationSummary,
-            waitThresholdExceeded,
-            runThresholdExceeded,
-            waitSampleCount,
-            runSampleCount,
+            humanTaskEntries,
+            humanTasksLoading,
+            humanTasksError,
+            blockingHumanTaskCount,
+            openHumanTaskCount,
+            refreshHumanTasks,
             retrying,
             canceling,
             restarting,
-            deletePromptLoading,
             formatDate,
             submitPrompt,
             selectPrompt,
@@ -3395,7 +3648,6 @@
             canCancelSelectedPrompt,
             cancelSelectedPrompt,
             restartSelectedPrompt,
-            deleteSelectedPrompt,
             copyToClipboard,
             attemptLogs,
             attemptKey,
@@ -3410,7 +3662,7 @@
             openSettingsView,
             returnToQueueView,
             goHome,
-            openProject,
+            handleHeaderIconClick,
             showQueuePanel,
             showThreadPanel,
             startGuidedTour,
@@ -3437,6 +3689,7 @@
             changePassword,
             fetchSshKeys,
             themeMode,
+            headerIconSrc,
             toggleTheme,
             chatThreadRef,
             liveStreamScrollRef,
@@ -3507,80 +3760,40 @@
             </v-dialog>
               <v-app-bar class="global-header" flat>
                 <v-app-bar-title>
-                  <button type="button" class="global-header__home-link" @click="goHome">
-                    <img src="./logo.svg" alt="Codex Nova" class="global-header__logo" width="36" height="36" />
-                    <span class="global-header__title">Codex Nova</span>
-                  </button>
+                  <div class="global-header__branding">
+                    <button type="button" class="global-header__home-link" @click="goHome">
+                      <img
+                        :src="headerIconSrc"
+                        alt="Nightshift"
+                        class="global-header__logo"
+                        width="36"
+                        height="36"
+                        title="Request refreshed header icon & favicon"
+                        @click.stop.prevent="handleHeaderIconClick"
+                      />
+                      <span class="global-header__title">Nightshift</span>
+                    </button>
+                    <v-btn
+                      v-if="isAuthenticated"
+                      class="guided-tour-trigger"
+                      variant="tonal"
+                      density="compact"
+                      size="x-small"
+                      prepend-icon="mdi-compass-outline"
+                      :title="
+                        canStartGuidedTour
+                          ? 'Step through what each panel does'
+                          : 'Guided tour is only available on the main dashboard in desktop layout'
+                      "
+                      :disabled="!canStartGuidedTour"
+                      @click="startGuidedTour"
+                    >
+                      Take tour
+                    </v-btn>
+                  </div>
                 </v-app-bar-title>
                 <v-spacer />
                 <div class="header-menus">
-                  <v-btn
-                    v-if="isAuthenticated"
-                    class="guided-tour-trigger"
-                    variant="tonal"
-                    size="small"
-                    prepend-icon="mdi-compass-outline"
-                    :title="
-                      canStartGuidedTour
-                        ? 'Step through what each panel does'
-                        : 'Guided tour is only available on the main dashboard in desktop layout'
-                    "
-                    :disabled="!canStartGuidedTour"
-                    @click="startGuidedTour"
-                  >
-                    Guided tour
-                  </v-btn>
-                  <v-menu
-                    v-if="projectOptions.length"
-                    location="bottom end"
-                    transition="scale-transition"
-                  >
-                    <template #activator="{ props }">
-                      <v-btn
-                        v-bind="props"
-                        class="projects-menu__activator"
-                        variant="text"
-                        density="comfortable"
-                      >
-                        <span>Projects</span>
-                        <span class="mdi mdi-menu-down" aria-hidden="true"></span>
-                      </v-btn>
-                    </template>
-                    <v-card class="projects-menu-card" elevation="8">
-                      <v-list>
-                        <v-list-item
-                          v-for="project in projectOptions"
-                          :key="project.id"
-                          class="projects-menu__item"
-                          :disabled="!project.launch_url"
-                          @click="openProject(project)"
-                        >
-                          <v-list-item-title>{{ project.name }}</v-list-item-title>
-                          <v-list-item-subtitle class="projects-menu__subtitle">
-                            {{ project.description || 'No description provided yet.' }}
-                          </v-list-item-subtitle>
-                          <template #append>
-                            <span
-                              v-if="project.id === activeProjectId"
-                              class="project-focus-badge"
-                              role="img"
-                              aria-label="Focused project"
-                              title="Focused project"
-                            ></span>
-                          </template>
-                        </v-list-item>
-                      </v-list>
-                    </v-card>
-                  </v-menu>
-                  <v-btn
-                    v-if="!projectOptions.length"
-                    class="projects-menu__activator"
-                    variant="text"
-                    density="comfortable"
-                    disabled
-                  >
-                    Projects
-                  </v-btn>
                   <div v-if="isAuthenticated" class="user-summary">
                     <v-menu location="bottom end" transition="scale-transition">
                       <template #activator="{ props }">
@@ -3665,7 +3878,7 @@
                     <v-card-title>Sign In</v-card-title>
                     <v-card-text>
                       <p class="text-body-2 text-medium-emphasis mb-4">
-                        Use your email credentials to access the prompt queue.
+                        Use your email credentials to access the Task queue.
                       </p>
                       <v-alert
                         v-if="loginError"
@@ -3864,89 +4077,83 @@
                           </v-sheet>
                         </div>
                       </v-card-text>
-                    </v-card>
-                    <v-card
-                      v-if="healthMetrics"
-                      elevation="0"
-                      class="panel-card mt-4"
-                    >
-                      <v-card-text class="pa-0">
-                        <div class="queue-health-card">
-                          <div class="queue-health-card__header">
-                            <div class="text-subtitle-2">Queue health</div>
-                            <v-chip size="x-small" variant="tonal" label class="queue-health-chip">
-                              {{ healthSampleSummary }}
+                      <v-divider />
+                      <div class="human-tasks-panel" data-tour-id="tour-human-tasks">
+                        <div class="human-tasks-panel__header">
+                          <span class="human-tasks-panel__header-title">Human Tasks</span>
+                          <div class="human-tasks-panel__badges">
+                            <v-chip label size="small" variant="tonal" color="warning">
+                              Blocking {{ blockingHumanTaskCount }}
                             </v-chip>
-                          </div>
-                          <div class="queue-health-card__status">
-                            <v-chip
-                              v-for="chip in healthStatusChips"
-                              :key="chip.key"
+                            <v-chip label size="small" variant="tonal" color="primary">
+                              Open {{ openHumanTaskCount }}
+                            </v-chip>
+                            <v-btn
+                              icon="mdi-refresh"
                               size="small"
-                              label
-                              class="queue-health-chip"
-                              :color="chip.color"
-                              variant="tonal"
-                            >
-                              {{ chip.label }} · {{ chip.count }}
-                            </v-chip>
-                          </div>
-                          <div class="queue-health-card__ages">
-                            <div class="queue-health-age">
-                              <div class="queue-health-age__label">Oldest queued</div>
-                              <div class="queue-health-age__value" :title="oldestQueuedInfo.title || ''">
-                                {{ oldestQueuedInfo.text }}
-                              </div>
-                            </div>
-                            <div class="queue-health-age">
-                              <div class="queue-health-age__label">Oldest running</div>
-                              <div class="queue-health-age__value" :title="oldestRunningInfo.title || ''">
-                                {{ oldestRunningInfo.text }}
-                              </div>
-                            </div>
-                          </div>
-                          <div class="queue-health-card__durations">
-                            <div class="queue-health-duration">
-                              <div class="queue-health-duration__label">Wait duration</div>
-                              <div class="queue-health-duration__value">
-                                <span>{{ waitDurationSummary }}</span>
-                                <span class="duration-max" v-if="waitSampleCount">
-                                  Samples {{ waitSampleCount }}
-                                </span>
-                                <v-chip
-                                  v-if="waitThresholdExceeded"
-                                  size="x-small"
-                                  label
-                                  variant="tonal"
-                                  color="warning"
-                                  prepend-icon="mdi-alert"
-                                >
-                                  Slow queue
-                                </v-chip>
-                              </div>
-                            </div>
-                            <div class="queue-health-duration">
-                              <div class="queue-health-duration__label">Run duration</div>
-                              <div class="queue-health-duration__value">
-                                <span>{{ runDurationSummary }}</span>
-                                <span class="duration-max" v-if="runSampleCount">
-                                  Samples {{ runSampleCount }}
-                                </span>
-                                <v-chip
-                                  v-if="runThresholdExceeded"
-                                  size="x-small"
-                                  label
-                                  variant="tonal"
-                                  color="error"
-                                  prepend-icon="mdi-trending-up"
-                                >
-                                  Long runs
-                                </v-chip>
-                              </div>
-                            </div>
+                              variant="text"
+                              :loading="humanTasksLoading"
+                              :disabled="humanTasksLoading"
+                              @click="refreshHumanTasks"
+                              aria-label="Refresh human tasks"
+                            ></v-btn>
                           </div>
                         </div>
-                      </v-card-text>
+                        <div class="human-tasks-panel__body">
+                          <v-alert
+                            v-if="humanTasksError"
+                            type="error"
+                            variant="tonal"
+                            density="comfortable"
+                            border="start"
+                          >
+                            {{ humanTasksError }}
+                          </v-alert>
+                          <v-skeleton-loader
+                            v-else-if="humanTasksLoading && !humanTaskEntries.length"
+                            type="list-item@2"
+                          />
+                          <div v-else-if="humanTaskEntries.length" class="human-tasks-list">
+                            <div v-for="task in humanTaskEntries" :key="task.task_id" class="human-task-entry">
+                              <div class="human-task-entry__header">
+                                <span>{{ task.title }}</span>
+                                <span class="text-caption text-medium-emphasis">
+                                  {{ task.statusDisplay }}
+                                </span>
+                              </div>
+                              <div class="human-task-entry__meta">
+                                <span>{{ task.projectDisplay }}</span>
+                                <span v-if="task.prompt_id">Prompt #{{ task.prompt_id }}</span>
+                                <span>{{ formatTimestamp(task.updated_at) }}</span>
+                              </div>
+                              <p class="human-task-entry__description">
+                                {{ task.descriptionSnippet }}
+                              </p>
+                              <div class="human-task-entry__footer">
+                                <span>Created {{ formatTimestamp(task.created_at) }}</span>
+                                <v-chip
+                                  v-if="task.blocking"
+                                  size="x-small"
+                                  color="error"
+                                  variant="tonal"
+                                  label
+                                >
+                                  Blocking
+                                </v-chip>
+                              </div>
+                            </div>
+                          </div>
+                          <div
+                            v-else
+                            class="human-tasks-panel__empty"
+                          >
+                            No human tasks logged yet — use scripts/human_tasks.py to add blockers.
+                          </div>
+                        </div>
+                        <div class="human-tasks-panel__footer">
+                          Logged blockers keep operators in the loop. Use <code>scripts/human_tasks.py</code> to add or resolve items.
+                        </div>
+                      </div>
                     </v-card>
                   </v-col>
                   <v-col cols="12" md="7" lg="8">
@@ -4003,7 +4210,7 @@
                   >
                     <v-card elevation="0" class="panel-card queue-card">
                       <v-card-title class="queue-card-title">
-                        <span>Prompt Queue</span>
+                        <span>Task Queue</span>
                         <v-spacer />
                         <v-chip
                           class="realtime-chip"
@@ -4033,17 +4240,29 @@
                           :items="projectOptions"
                           item-title="name"
                           item-value="id"
-                          label="Focused project"
+                          label="Project"
                           variant="outlined"
                           density="comfortable"
                           hide-details="auto"
                           :disabled="!projectOptions.length"
                         />
                         <div class="project-selector__hint">
-                          {{
-                            activeProjectDescription
-                              || 'Select a project to scope Codex runs and context.'
-                          }}
+                          <a
+                            v-if="activeProjectLaunchUrl"
+                            class="project-selector__live-link"
+                            :href="activeProjectLaunchUrl"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <span>{{ activeProjectLaunchUrl }}</span>
+                            <span class="mdi mdi-open-in-new" aria-hidden="true"></span>
+                          </a>
+                          <span
+                            v-else
+                            class="project-selector__live-link project-selector__live-link--disabled"
+                          >
+                            Live endpoint not configured
+                          </span>
                         </div>
                       </div>
                       <v-divider />
@@ -4126,8 +4345,33 @@
                               Back to queue
                             </v-btn>
                           </div>
-                          <div class="chat-card-title__heading">
-                            <span>Codex Task</span>
+                          <div
+                            class="chat-card-title__heading"
+                            v-if="selectedPrompt"
+                          >
+                            <div class="chat-card-title__task">
+                              <button
+                                type="button"
+                                class="task-id-button"
+                                title="Copy task ID"
+                                @click.stop="copyToClipboard(selectedPrompt.prompt_id || '')"
+                              >
+                                Task {{ selectedPrompt.prompt_id }}
+                                <span class="mdi mdi-content-copy" aria-hidden="true"></span>
+                              </button>
+                              <v-btn
+                                v-if="canCancelSelectedPrompt"
+                                class="chat-card-title__cancel"
+                                :color="(selectedPrompt?.status || '').toLowerCase() === 'queued' ? 'error' : 'warning'"
+                                variant="outlined"
+                                size="small"
+                                :loading="canceling"
+                                :disabled="canceling"
+                                @click="cancelSelectedPrompt"
+                              >
+                                Cancel
+                              </v-btn>
+                            </div>
                             <span
                               v-if="selectedPromptProjectName"
                               class="prompt-project-pill"
@@ -4135,25 +4379,27 @@
                               Project · {{ selectedPromptProjectName }}
                             </span>
                           </div>
-                          <div class="text-caption text-medium-emphasis" v-if="selectedPrompt">
-                            Prompt {{ selectedPrompt.prompt_id }} · Attempts {{ selectedPrompt.attempts || 0 }}
+                          <div
+                            class="chat-card-title__heading"
+                            v-else
+                          >
+                            <span
+                              v-if="selectedPromptProjectName"
+                              class="prompt-project-pill"
+                            >
+                              Project · {{ selectedPromptProjectName }}
+                            </span>
+                          </div>
+                          <div class="text-caption text-medium-emphasis chat-card-subtitle" v-if="selectedPrompt">
+                            <span class="chat-card-subtitle__attempts">
+                              Attempts {{ selectedPrompt.attempts || 0 }}
+                            </span>
                           </div>
                           <div class="text-caption text-medium-emphasis" v-else>
                             Select a prompt from the queue to review Codex output.
                           </div>
                         </div>
                         <div class="thread-header__actions">
-                          <v-btn
-                            v-if="canCancelSelectedPrompt"
-                            color="warning"
-                            variant="outlined"
-                            size="small"
-                            :loading="canceling"
-                            :disabled="canceling"
-                            @click="cancelSelectedPrompt"
-                          >
-                            Cancel
-                          </v-btn>
                           <v-btn
                             v-if="canRestartSelectedPrompt"
                             color="warning"
@@ -4164,16 +4410,6 @@
                             @click="restartSelectedPrompt"
                           >
                             Restart
-                          </v-btn>
-                          <v-btn
-                            v-if="canDeleteSelectedPrompt"
-                            color="error"
-                            variant="outlined"
-                            size="small"
-                            :loading="deletePromptLoading"
-                            @click="deleteSelectedPrompt"
-                          >
-                            Delete
                           </v-btn>
                           <v-btn
                             v-if="selectedPrompt && selectedPrompt.status === 'failed'"

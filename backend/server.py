@@ -1,6 +1,6 @@
 """Agent-enabled development host backend server.
 
-This lightweight HTTP server exposes a prompt queue API and serves the
+This lightweight HTTP server exposes a Task queue API and serves the
 Vue/Vuetify frontend from the ../frontend directory. It is intentionally
 implemented with the Python standard library so that it can run on a bare
 Raspberry Pi OS Lite install without additional dependencies.
@@ -34,7 +34,10 @@ from urllib.parse import unquote, urlsplit
 
 from auth import AuthManager, AuthenticatedUser
 from eink.it8591 import IT8591Config, IT8951_ROTATE_180
+# from git_branching import GitBranchError, PromptBranchDiscipline
+from human_tasks import HumanTaskStore, build_human_task_payload
 from log_utils import extract_stdout_preview
+from preferences import PreferenceStore
 from ssh_keys import SSHKeyManager, SSHKeyError
 
 
@@ -44,7 +47,9 @@ LOG_DIR = REPO_ROOT / "logs"
 FRONTEND_DIR = REPO_ROOT / "frontend"
 PROJECTS_DIR = REPO_ROOT / "projects"
 PROMPT_DB_PATH = DATA_DIR / "prompts.json"
+HUMAN_TASK_DB_PATH = DATA_DIR / "human_tasks.json"
 GENERAL_LOG_PATH = LOG_DIR / "progress.log"
+PREFERENCES_PATH = DATA_DIR / "preferences.json"
 APP_CONTEXT: Dict[str, Any] = {}
 PROMPT_DURATION_WINDOW = 50
 TERMINAL_PROMPT_STATUSES: set[str] = {"completed", "failed", "canceled"}
@@ -1060,11 +1065,17 @@ class PromptStore:
 
 
 class CodexRunner:
-    def __init__(self, repo_root: Path, streamer: Optional["EventStreamer"] = None):
+    def __init__(
+        self,
+        repo_root: Path,
+        streamer: Optional["EventStreamer"] = None,
+        logger: Optional[logging.Logger] = None,
+    ):
         self.repo_root = repo_root
         self.codex_bin = os.environ.get("CODEX_CLI", "codex")
         self.sandbox_mode = os.environ.get("CODEX_SANDBOX")
         self.streamer = streamer
+        self.logger = logger or logging.getLogger("codex_runner")
         self._lock = threading.Lock()
         self._active_prompt_id: Optional[str] = None
         self._active_process: Optional[subprocess.Popen[str]] = None
@@ -1123,6 +1134,9 @@ class CodexRunner:
         ]
         log_lines = ["\n".join(header)]
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        git_session = None
+        git_notes: list[str] = []
+        git_setup_error: Optional[str] = None
         scope_payload = scope.to_payload() if scope else {
             "description": "Scope guard fallback: allow entire repository",
             "allow": ["**"],
@@ -1182,6 +1196,15 @@ class CodexRunner:
 
         if not skip_execution:
             try:
+                git_session = self.branch_discipline.begin_run(prompt_id, prompt_text)
+                if git_session and git_session.notes:
+                    git_notes.extend(git_session.notes)
+            except GitBranchError as exc:
+                git_setup_error = str(exc)
+                git_notes.append(f"Git branch preparation failed: {git_setup_error}")
+
+        if not skip_execution and git_setup_error is None:
+            try:
                 process = subprocess.Popen(
                     cmd,
                     cwd=self.repo_root,
@@ -1230,7 +1253,11 @@ class CodexRunner:
                         pass
         else:
             success = False
-            summary = pending_summary or "Codex run canceled before execution"
+            if skip_execution:
+                summary = pending_summary or "Codex run canceled before execution"
+            else:
+                summary = f"Git branch preparation failed: {git_setup_error}"
+                self._broadcast_stream(prompt_id, "stderr", summary + "\n", reset=True)
 
         stdout_text = "".join(stdout_buffer)
         stderr_text = "".join(stderr_buffer)
@@ -1248,6 +1275,15 @@ class CodexRunner:
                     pass
         elapsed_seconds = time.perf_counter() - start_time
         completed_at = utcnow_iso()
+        cleanup_error: Optional[str] = None
+        if git_session:
+            try:
+                cleanup_notes = self.branch_discipline.finalize_run(git_session)
+                if cleanup_notes:
+                    git_notes.extend(cleanup_notes)
+            except GitBranchError as exc:
+                cleanup_error = str(exc)
+                git_notes.append(f"Git cleanup blocked: {cleanup_error}")
 
         with self._lock:
             canceled = self._cancel_target == prompt_id
@@ -1263,10 +1299,19 @@ class CodexRunner:
         elif violation_summary:
             success = False
             summary = violation_summary
+        if cleanup_error:
+            success = False
+            if canceled:
+                summary = f"{summary}; cleanup failed: {cleanup_error}"
+            else:
+                summary = f"Prompt branch cleanup failed: {cleanup_error}"
 
         attempt_status = "canceled" if canceled else ("completed" if success else "failed")
 
         log_lines.append(summary)
+        if git_notes:
+            git_section = "\n".join(f"- {note}" for note in git_notes)
+            log_lines.append(f"Git workflow notes:\n{git_section}")
         log_lines.append(f"Attempt status: {attempt_status}")
         log_lines.append(f"Attempt completed at {completed_at}")
         log_lines.append(f"Elapsed seconds {elapsed_seconds:.3f}")
@@ -1701,11 +1746,13 @@ class EventStreamer:
         logger: logging.Logger,
         ws_manager: WebSocketManager,
         project_registry: Optional[ProjectRegistry] = None,
+        human_tasks: Optional[HumanTaskStore] = None,
     ):
         self.store = store
         self.logger = logger
         self.ws_manager = ws_manager
         self.project_registry = project_registry
+        self.human_tasks = human_tasks
 
     def broadcast_queue(self, targets: Optional[Iterable[WebSocketConnection]] = None) -> None:
         snapshot = self.store.list_prompts()
@@ -1731,12 +1778,16 @@ class EventStreamer:
         self.ws_manager.broadcast("prompt_deleted", payload, targets=targets)
 
     def broadcast_health(self, targets: Optional[Iterable[WebSocketConnection]] = None) -> None:
-        metrics = self.store.health_snapshot()
+        prompt_metrics = self.store.health_snapshot()
+        task_metrics = self.human_tasks.health_snapshot() if self.human_tasks else {}
         payload = {
             "status": "ok",
             "timestamp": utcnow_iso(),
-            "pending": metrics.get("status_counts", {}).get("queued", 0),
-            "metrics": metrics,
+            "pending": prompt_metrics.get("status_counts", {}).get("queued", 0),
+            "metrics": {
+                **prompt_metrics,
+                "human_tasks": task_metrics,
+            },
         }
         self.ws_manager.broadcast("health", payload, targets=targets)
 
@@ -1839,11 +1890,13 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
         if self.path == "/api/health":
             store: PromptStore = APP_CONTEXT["store"]
             metrics = store.health_snapshot()
+            human_store: Optional[HumanTaskStore] = APP_CONTEXT.get("human_tasks")
+            human_metrics = human_store.health_snapshot() if human_store else {}
             payload = {
                 "status": "ok",
                 "timestamp": utcnow_iso(),
                 "pending": metrics.get("status_counts", {}).get("queued", 0),
-                "metrics": metrics,
+                "metrics": {**metrics, "human_tasks": human_metrics},
                 "user": APP_CONTEXT["auth"].user_payload(self.current_user) if self.current_user else None,
             }
             self._write_json(payload)
@@ -1858,6 +1911,19 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             else:
                 registry: Optional[ProjectRegistry] = APP_CONTEXT.get("projects")
                 self._write_json(build_prompt_payload(record, registry))
+        elif self.path == "/api/human_tasks":
+            store: HumanTaskStore = APP_CONTEXT["human_tasks"]
+            registry = APP_CONTEXT.get("projects")
+            self._write_json(store.to_collection_payload(registry))
+        elif self.path.startswith("/api/human_tasks/"):
+            task_id = self.path.rsplit("/", 1)[-1]
+            store = APP_CONTEXT["human_tasks"]
+            record = store.get_task(task_id)
+            if not record:
+                self._write_json({"error": "human task not found"}, status=404)
+            else:
+                registry = APP_CONTEXT.get("projects")
+                self._write_json({"task": build_human_task_payload(record, registry)})
         elif self.path == "/api/logs":
             if GENERAL_LOG_PATH.exists():
                 content = GENERAL_LOG_PATH.read_text(encoding="utf-8")
@@ -1915,6 +1981,40 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 events.broadcast_prompt(record.prompt_id)
                 events.broadcast_health()
             self._write_json({"prompt_id": record.prompt_id, "status": record.status}, status=201)
+        elif self.path == "/api/human_tasks":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body or b"{}")
+            except json.JSONDecodeError:
+                self._write_json({"error": "invalid json"}, status=400)
+                return
+            title = (payload.get("title") or "").strip()
+            description = (payload.get("description") or "").strip()
+            project_id = payload.get("project_id") or payload.get("project")
+            prompt_id = payload.get("prompt_id") or payload.get("prompt")
+            blocking = bool(payload.get("blocking"))
+            status = payload.get("status")
+            store: HumanTaskStore = APP_CONTEXT["human_tasks"]
+            try:
+                record = store.create_task(
+                    title,
+                    description,
+                    project_id=project_id,
+                    prompt_id=prompt_id,
+                    blocking=blocking,
+                    status=status,
+                )
+            except ValueError as exc:
+                self._write_json({"error": str(exc)}, status=400)
+                return
+            registry = APP_CONTEXT.get("projects")
+            APP_CONTEXT["audit_logger"].info("Created human task %s", record.task_id)
+            schedule_display_refresh("human-task-create")
+            events = APP_CONTEXT.get("events")
+            if events:
+                events.broadcast_health()
+            self._write_json({"task": build_human_task_payload(record, registry)}, status=201)
         elif self.path.startswith("/api/prompts/") and self.path.endswith("/retry"):
             parts = self.path.rstrip("/").split("/")
             if len(parts) < 4:
@@ -1979,10 +2079,53 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
     def _handle_api_put(self) -> None:
         if not self._require_auth():
             return
-        if not self.path.startswith("/api/prompts/"):
+        clean_path = self.path.split("?", 1)[0].rstrip("/")
+        if clean_path.startswith("/api/human_tasks/"):
+            task_id = clean_path.rsplit("/", 1)[-1]
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body or b"{}")
+            except json.JSONDecodeError:
+                self._write_json({"error": "invalid json"}, status=400)
+                return
+            updates: Dict[str, Any] = {}
+            if "title" in payload:
+                updates["title"] = payload.get("title") or payload.get("name")
+            if "description" in payload:
+                updates["description"] = payload.get("description")
+            if "status" in payload:
+                updates["status"] = payload.get("status")
+            if "blocking" in payload:
+                updates["blocking"] = bool(payload.get("blocking"))
+            if "project_id" in payload or "project" in payload:
+                updates["project_id"] = payload.get("project_id") or payload.get("project")
+            if "prompt_id" in payload or "prompt" in payload:
+                updates["prompt_id"] = payload.get("prompt_id") or payload.get("prompt")
+            if not updates:
+                self._write_json({"error": "no valid fields provided"}, status=400)
+                return
+            store: HumanTaskStore = APP_CONTEXT["human_tasks"]
+            try:
+                record = store.update_task(task_id, **updates)
+            except KeyError:
+                self._write_json({"error": "human task not found"}, status=404)
+                return
+            except ValueError as exc:
+                self._write_json({"error": str(exc)}, status=400)
+                return
+            registry = APP_CONTEXT.get("projects")
+            APP_CONTEXT["audit_logger"].info("Updated human task %s", task_id)
+            schedule_display_refresh("human-task-update")
+            events = APP_CONTEXT.get("events")
+            if events:
+                events.broadcast_health()
+            self._write_json({"task": build_human_task_payload(record, registry)})
+            return
+        if not clean_path.startswith("/api/prompts/"):
             self._write_json({"error": "unknown endpoint"}, status=404)
             return
-        prompt_id = self.path.rstrip("/").split("/")[-1]
+        prompt_id = clean_path.split("/")[-1]
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length)
         try:
@@ -2009,10 +2152,41 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             events.broadcast_prompt(prompt_id)
         self._write_json({"prompt_id": prompt_id, "status": record.status, "text": record.text})
 
+    def _handle_theme_preference_update(self) -> None:
+        preferences: Optional[PreferenceStore] = APP_CONTEXT.get("preferences")
+        if not preferences:
+            self._write_json({"error": "preferences unavailable"}, status=503)
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+        try:
+            payload = json.loads(body or b"{}")
+        except json.JSONDecodeError:
+            self._write_json({"error": "invalid json"}, status=400)
+            return
+        mode = (payload.get("mode") or payload.get("theme") or "").strip().lower()
+        if mode not in {"light", "dark"}:
+            self._write_json({"error": "mode must be 'light' or 'dark'"}, status=400)
+            return
+        try:
+            preferences.set_theme_mode(mode)
+        except ValueError as exc:
+            self._write_json({"error": str(exc)}, status=400)
+            return
+        except Exception as exc:  # pragma: no cover - unexpected persistence issues
+            APP_CONTEXT["audit_logger"].error("Unable to save theme preference: %s", exc)
+            self._write_json({"error": "unable to persist preference"}, status=500)
+            return
+        schedule_display_refresh("theme")
+        self._write_json({"mode": mode})
+
     def _handle_api_put(self) -> None:
+        clean_path = self.path.split("?", 1)[0]
+        if clean_path == "/api/preferences/theme":
+            self._handle_theme_preference_update()
+            return
         if not self._require_auth():
             return
-        clean_path = self.path.split("?", 1)[0]
         if clean_path.startswith("/api/prompts/"):
             prompt_id = clean_path.rstrip("/").rsplit("/", 1)[-1]
             if not prompt_id:
@@ -2075,6 +2249,23 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 events.broadcast_prompt_deleted(prompt_id)
             schedule_display_refresh("delete")
             self._write_json({"prompt_id": prompt_id, "deleted": True})
+        elif clean_path.startswith("/api/human_tasks/"):
+            task_id = clean_path.rstrip("/").rsplit("/", 1)[-1]
+            if not task_id:
+                self._write_json({"error": "task_id required"}, status=400)
+                return
+            store: HumanTaskStore = APP_CONTEXT["human_tasks"]
+            try:
+                store.delete_task(task_id)
+            except KeyError:
+                self._write_json({"error": "human task not found"}, status=404)
+                return
+            APP_CONTEXT["audit_logger"].info("Deleted human task %s", task_id)
+            events = APP_CONTEXT.get("events")
+            if events:
+                events.broadcast_health()
+            schedule_display_refresh("human-task-delete")
+            self._write_json({"task_id": task_id, "deleted": True})
         else:
             self._write_json({"error": "unknown endpoint"}, status=404)
 
@@ -2162,7 +2353,11 @@ def configure_logging() -> logging.Logger:
     return logger
 
 
-def start_display_manager(store: PromptStore, logger: logging.Logger):
+def start_display_manager(
+    store: PromptStore,
+    logger: logging.Logger,
+    preferences: PreferenceStore | None,
+):
     if not _env_flag("ENABLE_EINK_DISPLAY"):
         return None
     try:
@@ -2193,7 +2388,7 @@ def start_display_manager(store: PromptStore, logger: logging.Logger):
         vcom_mv=_env_int("EINK_VCOM_MV", 1800),
         rotate=_env_int("EINK_ROTATE", IT8951_ROTATE_180),
     )
-    manager = TaskQueueDisplayManager(store, logger, enabled=True, config=config)
+    manager = TaskQueueDisplayManager(store, logger, enabled=True, config=config, preferences=preferences)
     manager.start()
     return manager
 
@@ -2204,6 +2399,8 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
     project_registry = ProjectRegistry(PROJECTS_DIR, preferred_project)
     audit_logger = configure_logging()
     store = PromptStore(PROMPT_DB_PATH, project_registry)
+    human_task_store = HumanTaskStore(HUMAN_TASK_DB_PATH, project_registry)
+    preference_store = PreferenceStore(PREFERENCES_PATH)
     auth_manager = AuthManager(DATA_DIR)
     auth_manager.ensure_user("ulfurk@ulfurk.com", "dehost#1")
     ssh_key_manager = SSHKeyManager(DATA_DIR, audit_logger)
@@ -2212,7 +2409,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
     except SSHKeyError as exc:
         audit_logger.error("SSH key initialization failed: %s", exc)
     ws_manager = WebSocketManager(auth_manager, audit_logger)
-    events = EventStreamer(store, audit_logger, ws_manager, project_registry)
+    events = EventStreamer(store, audit_logger, ws_manager, project_registry, human_task_store)
     ws_manager.event_streamer = events
     recovered_prompt_ids = store.consume_recovered_prompts()
     if recovered_prompt_ids:
@@ -2220,8 +2417,8 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         for prompt_id in recovered_prompt_ids:
             events.broadcast_prompt(prompt_id)
         events.broadcast_health()
-    runner = CodexRunner(REPO_ROOT, events)
-    display_manager = start_display_manager(store, audit_logger)
+    runner = CodexRunner(REPO_ROOT, events, audit_logger)
+    display_manager = start_display_manager(store, audit_logger, preference_store)
     worker = PromptWorker(store, runner, audit_logger, display_manager, event_streamer=events)
     worker.start()
     health_thread = HealthBroadcaster(events)
@@ -2230,6 +2427,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
     global APP_CONTEXT  # pylint: disable=global-statement
     APP_CONTEXT = {
         "store": store,
+        "human_tasks": human_task_store,
         "audit_logger": audit_logger,
         "display_manager": display_manager,
         "auth": auth_manager,
@@ -2238,6 +2436,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         "worker": worker,
         "ssh_keys": ssh_key_manager,
         "projects": project_registry,
+        "preferences": preference_store,
     }
     if recovered_prompt_ids:
         schedule_display_refresh("recovered prompts")

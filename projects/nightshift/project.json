@@ -1,6 +1,6 @@
 {
-  "id": "agent-dev-host",
-  "name": "Agent Dev Host",
+  "id": "nightshift",
+  "name": "Nightshift",
   "description": "Core platform for the Codex-enabled development host and its backend/frontend codebase.",
   "contextFile": "context.md",
   "launchPath": null,

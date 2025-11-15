@@ -1,5 +1,5 @@
 description: >
-  Updates to the Agent Dev Host platform span the backend, shared frontend shell, docs,
+  Updates to the Nightshift platform span the backend, shared frontend shell, docs,
   and project registry metadata but must not touch the project sandboxes themselves.
 allow:
   - backend/**

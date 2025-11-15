@@ -1,11 +1,11 @@
-# Agent-Enabled Dev Host
+# Nightshift
 
-This repo hosts a lightweight proof-of-concept for an agent-accessible development workspace. It is designed for a Raspberry Pi 5 (Pi OS Lite) but can run anywhere Python 3.11+ is available.
+Nightshift (`nightshift.git`) is a lightweight proof-of-concept for an agent-accessible development workspace. It is designed for a Raspberry Pi 5 (Pi OS Lite) but can run anywhere Python 3.11+ is available.
 
 ## Architecture
 - **Frontend**: Single-page Vue3 + Vuetify app served as static assets from `frontend/index.html`. Uses CDN builds to avoid a Node toolchain on constrained hosts.
-- **Backend**: Pure Python HTTP server (`backend/server.py`) that serves the frontend, exposes a prompt queue API, and runs queued prompts through a pluggable Codex runner.
-- **Storage**: JSON file at `data/prompts.json` for prompt metadata, per-prompt log files in `logs/`, and a rolling operations log at `logs/progress.log`.
+- **Backend**: Pure Python HTTP server (`backend/server.py`) that serves the frontend, exposes a Task queue API, and runs queued prompts through a pluggable Codex runner.
+- **Storage**: JSON files at `data/prompts.json` (prompt metadata) and `data/human_tasks.json` (Human Task blockers), per-prompt log files in `logs/`, and a rolling operations log at `logs/progress.log`.
 
 ## Getting Started
 1. Ensure Python 3.11+ is installed (`python3 --version`).
@@ -17,6 +17,39 @@ This repo hosts a lightweight proof-of-concept for an agent-accessible developme
 4. Visit the frontend from another machine on the network at `http://<host>` (port 80 is reverse-proxied to the backend via nginx; websocket traffic is forwarded automatically). If you’re on the same host, `curl http://127.0.0.1` should return the HTML shell.
 
 The backend binds to `0.0.0.0` by default; override `AGENT_HOST` and `AGENT_PORT` environment variables as needed.
+
+## Prompt Git Workflow
+Every prompt now runs on its own branch cut from `dev` so the queue never edits `main` directly:
+- When a prompt starts, the backend checks that the workspace is clean, switches to `dev`, and creates `nightshift/prompt-<prompt_id>-<slug>`.
+- All edits from that prompt happen on that branch. Agents **must not** merge into `main`; merges back into `dev` only happen when operators explicitly ask for it.
+- When the attempt finishes and the tree is clean (changes committed/merged), the backend switches back to `dev` and deletes the prompt branch locally. If files are still dirty, cleanup is blocked and the prompt is marked failed until the operator resolves the leftovers.
+
+### Configuration knobs
+Tune the workflow with env vars before starting the backend:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NIGHTSHIFT_GIT_BASE_BRANCH` | `dev` | Base branch for prompt work. |
+| `NIGHTSHIFT_PROMPT_BRANCH_PREFIX` | `nightshift/prompt` | Prefix for the per-prompt branch names. |
+| `NIGHTSHIFT_BRANCH_SLUG_WORDS` | `6` | Number of prompt words used to build the slug. |
+| `NIGHTSHIFT_BRANCH_SLUG_CHARS` | `48` | Maximum slug length (clipped and kebab-cased). |
+| `NIGHTSHIFT_PROMPT_BRANCH_CLEANUP` | `1` | Set to `0` to leave branches checked out after a run. |
+| `NIGHTSHIFT_GIT_ALLOW_DIRTY` | `0` | Set to `1` only for debugging to skip the clean-tree preflight. |
+| `NIGHTSHIFT_GIT_DRY_RUN` | `0` | Log mutating git commands without running them (useful with the smoke test). |
+| `NIGHTSHIFT_DISABLE_BRANCH_DISCIPLINE` | `0` | Disable the entire workflow if a project truly cannot support it. |
+
+### Smoke test
+Use `scripts/git_branch_smoke.py` to dry-run the workflow and verify your repo is ready:
+
+```bash
+# Preview the git commands without touching the tree
+./scripts/git_branch_smoke.py
+
+# Actually create and delete a test branch (use on clean dev checkouts only)
+./scripts/git_branch_smoke.py --execute --prompt-id smoke123 --prompt "Validate branch discipline"
+```
+
+The script exits non-zero if the repo is dirty, the `dev` branch is missing, or cleanup cannot complete—treat that as a blocker before queueing prompts.
 
 ## API Summary
 - `GET /api/health` – queue observability payload (status counts, oldest queued/running prompts + timestamps, rolling wait/run stats).
@@ -42,6 +75,38 @@ The frontend “Queue Health” card mirrors the same data:
 
 Because `/api/health` is broadcast over the WebSocket channel as well as the REST endpoint, you can watch for those badges programmatically. Paired with the prompt IDs in `metrics.oldest.*`, it becomes trivial to page an operator (or enqueue a cancel/retry prompt) before the entire queue stalls.
 
+## Human Tasks Queue
+Section 0.2 of the roadmap is now live: the backend persists operator blockers in `data/human_tasks.json`,
+surfaces them in the UI, and exposes the data alongside prompt metrics.
+
+### API endpoints
+- `GET /api/human_tasks` – list every task plus a summary (status counts, blocking count, oldest blocking task, revision).
+- `POST /api/human_tasks` – create a new entry (`title`, optional `description`, `project_id`, `prompt_id`, `blocking`, `status`).
+- `PUT /api/human_tasks/<id>` – update any subset of the fields.
+- `DELETE /api/human_tasks/<id>` – remove stray entries (resolved tasks should normally stay around for auditing).
+
+`/api/health.metrics.human_tasks` mirrors the same summary and ships down every 10 seconds over the WebSocket health broadcast. The Vue dashboard listens for the revision number in that payload and refreshes the visible queue automatically when it changes.
+
+### CLI helper
+Use `scripts/human_tasks.py` to log blockers without touching the UI:
+
+```bash
+# Add a blocking task scoped to a project/prompt
+./scripts/human_tasks.py add "Awaiting security review" \
+  --project nightshift --prompt 87cdc9a0ffab4628a019ca681a942d41 \
+  --blocking --description "Need sign-off before modifying prod config."
+
+# List only blocking items (JSON or human-friendly output)
+./scripts/human_tasks.py list --blocking-only
+./scripts/human_tasks.py list --json | jq .
+
+# Resolve or delete tasks
+./scripts/human_tasks.py resolve <task_id>
+./scripts/human_tasks.py delete <task_id>
+```
+
+The left column of the dashboard now includes a “Human Tasks” panel under the prompt queue. It highlights the number of blocking/open items, the latest updates, and the related project/prompt IDs so operators can spot stuck work quickly.
+
 ## CLI Prompt Helper
 Queueing something quickly from SSH is often easier than opening the Vue app.
 Use `scripts/enqueue_prompt.py` to log in (or reuse an existing token) and fire
@@ -55,7 +120,7 @@ a prompt at the backend:
 # Option 2: pipe multi-line text and reuse env vars for auth/host config
 export AGENT_EMAIL=ulfurk@ulfurk.com
 export AGENT_PASSWORD='dehost#1'
-cat prompt.txt | ./scripts/enqueue_prompt.py --project agent-dev-host
+cat prompt.txt | ./scripts/enqueue_prompt.py --project nightshift
 ```
 
 Defaults come from `AGENT_HOST` (`127.0.0.1`), `AGENT_PORT` (`8080`), and
@@ -68,8 +133,8 @@ Failed prompts stay in the queue history. Use the **Retry Prompt** button in the
 ## Running under systemd (recommended)
 The repo ships with a user-level systemd unit so the backend survives SSH disconnects and restarts. Files live under `~/.config/systemd/user/`:
 
-- `agent-dev-host.service` – points `ExecStart` at `/usr/bin/python3 backend/server.py`, restarts on failure, and redirects stdout/stderr to `logs/backend.stdout.log` / `logs/backend.stderr.log`.
-- `agent-dev-host.env` – central place to define `PATH`, `CODEX_CLI`, `CODEX_SANDBOX`, `ENABLE_EINK_DISPLAY=1`, and any `EINK_*` pin overrides.
+- `nightshift.service` – points `ExecStart` at `/usr/bin/python3 backend/server.py`, restarts on failure, and redirects stdout/stderr to `logs/backend.stdout.log` / `logs/backend.stderr.log`.
+- `nightshift.env` – central place to define `PATH`, `CODEX_CLI`, `CODEX_SANDBOX`, `ENABLE_EINK_DISPLAY=1`, and any `EINK_*` pin overrides.
 
 Day-to-day commands:
 
@@ -78,17 +143,17 @@ Day-to-day commands:
 systemctl --user daemon-reload
 
 # Control the service
-systemctl --user start agent-dev-host.service
-systemctl --user stop agent-dev-host.service
-systemctl --user restart agent-dev-host.service
-systemctl --user status agent-dev-host.service
+systemctl --user start nightshift.service
+systemctl --user stop nightshift.service
+systemctl --user restart nightshift.service
+systemctl --user status nightshift.service
 
 # View logs
-journalctl --user -u agent-dev-host.service -f
+journalctl --user -u nightshift.service -f
 tail -f logs/backend.stdout.log
 ```
 
-The unit is enabled already (`systemctl --user enable agent-dev-host.service`). To have it come up automatically on boot, run `sudo loginctl enable-linger ulfurk` once so your user session is kept alive.
+The unit is enabled already (`systemctl --user enable nightshift.service`). To have it come up automatically on boot, run `sudo loginctl enable-linger ulfurk` once so your user session is kept alive.
 
 ## Codex Runner Stub
 Until the real Codex CLI is available, the backend writes placeholder output to the prompt log. Once Codex is deployed on the device:
@@ -154,7 +219,7 @@ When enabled, the screen shows the most recent tasks (status, snippet, and last 
 For emergency network setup (e.g., deploying the Pi without Ethernet), use the included helper:
 
 ```bash
-cd /home/ulfurk/devhost
+cd /home/ulfurk/nightshift
 sudo scripts/configure_wifi.sh <SSID> <password> [country]
 ```
 

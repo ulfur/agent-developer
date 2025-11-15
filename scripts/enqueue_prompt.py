@@ -28,7 +28,7 @@ class CLIError(Exception):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Queue a prompt via the Agent Dev Host backend API.",
+        description="Queue a prompt via the Nightshift backend API.",
         epilog=(
             "Provide the prompt text as an argument or pipe it via stdin. "
             "Credentials can be supplied via --email/--password or the "
@@ -183,4 +183,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
