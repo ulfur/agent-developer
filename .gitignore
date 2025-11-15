@@ -6,3 +6,4 @@ data/.auth_secret
 data/users.json
 data/prompts.json
 data/ssh/
+projects/
