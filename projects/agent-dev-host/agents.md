@@ -20,7 +20,7 @@
 ### Frontend (`frontend/index.html`)
 - Single-file Vue3 + Vuetify SPA loaded from CDN builds. Supports login, live queue updates, per-attempt threads, stdout/stderr streaming, retries, and a settings pane for passwords + SSH keys.
 - The project selector stores the user’s choice in `localStorage` (`codex-active-project`) and passes it with new prompts so the backend can stitch the correct context.
-- The “Projects” launcher opens `launch_url` entries (e.g., `/projects/accgam/index.html`) so auxiliary demos stay co-hosted with the agent tools.
+- The “Projects” launcher opens a project’s `launch_url` (e.g., `/projects/<id>/index.html`) so auxiliary demos stay co-hosted with the agent tools.
 
 ### Data, logs & supervisors
 - `data/` – prompt DB, auth state, SSH keys, and future persistence artifacts.

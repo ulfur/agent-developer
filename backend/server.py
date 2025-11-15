@@ -19,15 +19,18 @@ import re
 import socket
 import struct
 import subprocess
+import sys
 import threading
 import time
 import uuid
+from collections import Counter, deque
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
+from urllib.parse import unquote, urlsplit
 
 from auth import AuthManager, AuthenticatedUser
 from eink.it8591 import IT8591Config, IT8951_ROTATE_180
@@ -43,6 +46,9 @@ PROJECTS_DIR = REPO_ROOT / "projects"
 PROMPT_DB_PATH = DATA_DIR / "prompts.json"
 GENERAL_LOG_PATH = LOG_DIR / "progress.log"
 APP_CONTEXT: Dict[str, Any] = {}
+PROMPT_DURATION_WINDOW = 50
+TERMINAL_PROMPT_STATUSES: set[str] = {"completed", "failed", "canceled"}
+PROMPT_STATUSES: tuple[str, ...] = ("queued", "running", "completed", "failed", "canceled")
 
 
 def schedule_display_refresh(reason: str) -> None:
@@ -69,6 +75,35 @@ def utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def parse_iso_timestamp(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def seconds_between(start_iso: Optional[str], end_iso: Optional[str]) -> Optional[float]:
+    start_dt = parse_iso_timestamp(start_iso)
+    end_dt = parse_iso_timestamp(end_iso)
+    if not start_dt or not end_dt:
+        return None
+    delta = (end_dt - start_dt).total_seconds()
+    return delta if delta >= 0 else 0.0
+
+
+def seconds_since(timestamp: Optional[str]) -> Optional[float]:
+    reference = parse_iso_timestamp(timestamp)
+    if not reference:
+        return None
+    delta = (datetime.now(timezone.utc) - reference).total_seconds()
+    return delta if delta >= 0 else 0.0
+
+
 def ensure_dirs() -> None:
     for path in (DATA_DIR, LOG_DIR, FRONTEND_DIR, PROJECTS_DIR):
         path.mkdir(parents=True, exist_ok=True)
@@ -82,6 +117,40 @@ def load_agents_context() -> str:
 
 
 @dataclass
+class ProjectScope:
+    description: str
+    allow: list[str]
+    deny: list[str]
+    log_only: list[str]
+    is_fallback: bool = False
+
+    def to_payload(self) -> Dict[str, Any]:
+        return {
+            "description": self.description,
+            "allow": list(self.allow),
+            "deny": list(self.deny),
+            "log_only": list(self.log_only),
+            "is_fallback": self.is_fallback,
+        }
+
+    def guardrail_blurb(self) -> str:
+        lines: list[str] = ["Scope guardrail:"]
+        description = self.description.strip()
+        if description:
+            prefix = "Fallback manifest" if self.is_fallback else "Manifest"
+            lines.append(f"- {prefix}: {description}")
+        elif self.is_fallback:
+            lines.append("- Fallback manifest: Only project files may be edited.")
+        if self.allow:
+            lines.append(f"- Allowed globs: {', '.join(self.allow)}")
+        if self.deny:
+            lines.append(f"- Denied globs: {', '.join(self.deny)}")
+        if self.log_only:
+            lines.append(f"- Log-only globs: {', '.join(self.log_only)}")
+        return "\n".join(lines)
+
+
+@dataclass
 class ProjectDefinition:
     project_id: str
     name: str
@@ -90,6 +159,8 @@ class ProjectDefinition:
     guidance_file: Path | None
     launch_path: Optional[str] = None
     is_default: bool = False
+    scope: ProjectScope | None = None
+    root_dir: Path | None = None
 
     def read_context(self) -> str:
         if not self.context_file:
@@ -116,12 +187,136 @@ class ProjectDefinition:
         }
 
 
+_SCOPE_LIST_KEYS = {"allow", "deny", "log_only"}
+
+
+def _remove_inline_comment(value: str) -> str:
+    trimmed = value
+    for marker in (" #", "\t#"):
+        marker_index = trimmed.find(marker)
+        if marker_index != -1:
+            trimmed = trimmed[:marker_index]
+            break
+    if trimmed.strip().startswith("#"):
+        return ""
+    return trimmed.rstrip()
+
+
+def _strip_scope_value(value: str) -> str:
+    trimmed = _remove_inline_comment(value).strip()
+    if trimmed.startswith(("'", '"')) and trimmed.endswith(trimmed[0]):
+        trimmed = trimmed[1:-1]
+    return trimmed.strip()
+
+
+def _split_inline_scope_list(value: str) -> list[str]:
+    parts = []
+    current = []
+    depth = 0
+    for char in value:
+        if char == "," and depth == 0:
+            entry = "".join(current).strip()
+            if entry:
+                parts.append(entry)
+            current = []
+            continue
+        if char in {'\"', "'"}:
+            depth ^= 1
+        current.append(char)
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _parse_scope_manifest(text: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "description": "",
+        "allow": [],
+        "deny": [],
+        "log_only": [],
+    }
+    active_list: str | None = None
+    capturing_description = False
+    description_lines: list[str] = []
+
+    def finalize_description() -> None:
+        nonlocal capturing_description, description_lines
+        if not capturing_description:
+            return
+        payload["description"] = "\n".join(line.rstrip() for line in description_lines).strip()
+        capturing_description = False
+        description_lines = []
+
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+        if indent == 0:
+            finalize_description()
+            active_list = None
+            if ":" not in stripped:
+                continue
+            key, _, remainder = stripped.partition(":")
+            key = key.strip()
+            remainder = _remove_inline_comment(remainder.strip())
+            if key == "description":
+                if remainder and remainder not in {"|", ">"}:
+                    payload["description"] = _strip_scope_value(remainder)
+                else:
+                    capturing_description = True
+                    description_lines = []
+                continue
+            if key in _SCOPE_LIST_KEYS:
+                payload[key] = []
+                if not remainder or remainder in {"|", ">"}:
+                    active_list = key
+                    continue
+                if remainder.startswith("[") and remainder.endswith("]"):
+                    inner = remainder[1:-1].strip()
+                    if inner:
+                        for entry in _split_inline_scope_list(inner):
+                            sanitized = _strip_scope_value(entry)
+                            if sanitized:
+                                payload[key].append(sanitized)
+                else:
+                    sanitized = _strip_scope_value(remainder)
+                    if sanitized:
+                        payload[key].append(sanitized)
+                continue
+            raise ValueError(f"Unknown key '{key}' in scope manifest")
+        else:
+            if capturing_description:
+                description_lines.append(_remove_inline_comment(raw_line.lstrip()))
+                continue
+            if active_list:
+                if stripped.startswith("- "):
+                    sanitized_value = _strip_scope_value(stripped[2:])
+                    if sanitized_value:
+                        payload[active_list].append(sanitized_value)
+                elif stripped == "-":
+                    payload[active_list].append("")
+                else:
+                    if not payload[active_list]:
+                        raise ValueError("Continuation encountered before first list item")
+                    payload[active_list][-1] = f"{payload[active_list][-1]} {stripped}".strip()
+                continue
+            raise ValueError("Unexpected indentation in scope manifest")
+    finalize_description()
+    for key in _SCOPE_LIST_KEYS:
+        payload[key] = [str(entry).strip() for entry in payload.get(key, []) if str(entry).strip()]
+    payload["description"] = str(payload.get("description", "")).strip()
+    return payload
+
+
 class ProjectRegistry:
     def __init__(self, base_dir: Path, preferred_default: Optional[str] = None) -> None:
         self.base_dir = base_dir
         self._projects: dict[str, ProjectDefinition] = {}
         self._preferred_default = preferred_default
         self.default_project_id: Optional[str] = None
+        self._logger = logging.getLogger("agent_backend.projects")
         self.reload()
 
     def reload(self) -> None:
@@ -153,6 +348,7 @@ class ProjectRegistry:
                 guidance_path = default_guidance if default_guidance.exists() else None
             launch_path = metadata.get("launchPath") or metadata.get("launch_path") or metadata.get("launchUrl")
             is_default = bool(metadata.get("default"))
+            scope = self._load_scope(directory, project_id)
             project = ProjectDefinition(
                 project_id=project_id,
                 name=name or project_id,
@@ -161,6 +357,8 @@ class ProjectRegistry:
                 guidance_file=guidance_path,
                 launch_path=launch_path,
                 is_default=is_default,
+                scope=scope,
+                root_dir=directory,
             )
             self._projects[project_id] = project
             if is_default:
@@ -180,6 +378,29 @@ class ProjectRegistry:
         except (OSError, json.JSONDecodeError):
             return {}
 
+    def _load_scope(self, directory: Path, project_id: str) -> ProjectScope | None:
+        scope_path = directory / "scope.yml"
+        if not scope_path.exists():
+            return None
+        try:
+            raw = scope_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            if self._logger:
+                self._logger.warning("Unable to read scope manifest for %s: %s", project_id, exc)
+            return None
+        try:
+            parsed = _parse_scope_manifest(raw)
+        except ValueError as exc:
+            if self._logger:
+                self._logger.warning("Invalid scope manifest for %s: %s", project_id, exc)
+            return None
+        return ProjectScope(
+            description=str(parsed.get("description", "")).strip(),
+            allow=list(parsed.get("allow", [])),
+            deny=list(parsed.get("deny", [])),
+            log_only=list(parsed.get("log_only", [])),
+        )
+
     def get(self, project_id: Optional[str]) -> Optional[ProjectDefinition]:
         if not project_id:
             return self._projects.get(self.default_project_id or "")
@@ -191,7 +412,11 @@ class ProjectRegistry:
         return self.default_project_id
 
     def to_payload(self) -> Dict[str, Any]:
-        items = [project.to_payload() for project in self._projects.values()]
+        items: list[Dict[str, Any]] = []
+        for project in self._projects.values():
+            payload = project.to_payload()
+            payload["scope"] = self.scope_payload(project)
+            items.append(payload)
         return {
             "projects": items,
             "default_project_id": self.default_project_id,
@@ -208,13 +433,10 @@ class ProjectRegistry:
         if project.description:
             header_lines.append(project.description)
         sections = ["\n".join(header_lines)]
-        if project.project_id != "agent-dev-host":
-            sections.append(
-                "Host guardrail: Since this prompt does not target the Agent Dev Host, "
-                "do not edit the host frontend (`frontend/index.html` or shared Vue/Vuetify scaffolding), "
-                "backend (`backend/` services), or other platform internals. Limit host interactions to "
-                "logging/progress updates only."
-            )
+        scope = self._resolved_scope(project)
+        guardrail = scope.guardrail_blurb().strip()
+        if guardrail:
+            sections.append(guardrail)
         if project_context:
             sections.append(project_context)
         if project_guidance:
@@ -222,6 +444,46 @@ class ProjectRegistry:
         if base_context:
             sections.append(f"Shared agent guidance:\n{base_context}")
         return "\n\n---\n\n".join(section.strip() for section in sections if section.strip()).strip()
+
+    def _resolved_scope(self, project: ProjectDefinition) -> ProjectScope:
+        if project.scope:
+            return project.scope
+        return self._default_scope_for(project)
+
+    def _default_scope_for(self, project: ProjectDefinition) -> ProjectScope:
+        root_dir = project.root_dir or (self.base_dir / project.project_id)
+        try:
+            relative = root_dir.relative_to(REPO_ROOT)
+        except ValueError:
+            relative = root_dir
+        glob = f"{relative.as_posix()}/**"
+        description = f"No scope.yml found; restrict edits to {glob} until a manifest is defined."
+        return ProjectScope(
+            description=description,
+            allow=[glob],
+            deny=[],
+            log_only=[],
+            is_fallback=True,
+        )
+
+    def _scope_payload_for(self, project: ProjectDefinition) -> Dict[str, Any]:
+        return self._resolved_scope(project).to_payload()
+
+    def scope_payload(self, project: ProjectDefinition) -> Dict[str, Any]:
+        return self._scope_payload_for(project)
+
+    def resolved_scope_for_id(self, project_id: Optional[str]) -> ProjectScope:
+        project = self.get(project_id)
+        if project:
+            return self._resolved_scope(project)
+        description = "No matching project scope; allow full repository until metadata is fixed."
+        return ProjectScope(
+            description=description,
+            allow=["**"],
+            deny=[],
+            log_only=[],
+            is_fallback=True,
+        )
 
 
 def build_prompt_context(project_id: Optional[str], registry: Optional[ProjectRegistry]) -> str:
@@ -345,7 +607,9 @@ def build_prompt_payload(record: "PromptRecord", registry: Optional[ProjectRegis
     if registry:
         project = registry.get(record.project_id)
         if project:
-            payload["project"] = project.to_payload()
+            project_payload = project.to_payload()
+            project_payload["scope"] = registry.scope_payload(project)
+            payload["project"] = project_payload
     if record.status == "completed":
         payload["stdout_preview"] = extract_stdout_preview(record.log_path)
     else:
@@ -360,10 +624,16 @@ class PromptRecord:
     status: str
     created_at: str
     updated_at: str
+    enqueued_at: str
     log_path: str
     result_summary: Optional[str] = None
     attempts: int = 0
     project_id: Optional[str] = None
+    started_at: Optional[str] = None
+    current_wait_seconds: Optional[float] = None
+    last_wait_seconds: Optional[float] = None
+    last_run_seconds: Optional[float] = None
+    last_finished_at: Optional[str] = None
 
 
 class PromptStore:
@@ -376,7 +646,15 @@ class PromptStore:
         self._stale_running: list[str] = []
         self._recovered_prompt_ids: list[str] = []
         self._logger = logging.getLogger("agent_backend")
+        self._status_counts: Counter[str] = Counter()
+        self._recent_durations: deque[tuple[Optional[float], Optional[float]]] = deque()
+        self._recent_wait_sum = 0.0
+        self._recent_run_sum = 0.0
+        self._recent_wait_count = 0
+        self._recent_run_count = 0
+        self._duration_window = PROMPT_DURATION_WINDOW
         self._load()
+        self._rebuild_duration_history()
         self._recover_inflight_prompts()
 
     def _load(self) -> None:
@@ -386,21 +664,100 @@ class PromptStore:
             data = json.loads(self.db_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             data = {}
+        if not isinstance(data, dict):
+            data = {}
         with self._lock:
+            self._records.clear()
+            self._status_counts.clear()
             for prompt_id, payload in data.items():
+                if not isinstance(payload, dict):
+                    continue
                 payload.setdefault("attempts", 0)
                 payload.pop("max_retries", None)
+                status = str(payload.get("status") or "queued")
+                payload["status"] = status
                 payload["project_id"] = self._normalize_project_id(payload.get("project_id"))
-                self._records[prompt_id] = PromptRecord(**payload)
-                if payload.get("status") == "queued":
+                payload["enqueued_at"] = (
+                    payload.get("enqueued_at")
+                    or payload.get("created_at")
+                    or utcnow_iso()
+                )
+                payload.setdefault("started_at", None)
+                payload.setdefault("current_wait_seconds", None)
+                payload.setdefault("last_wait_seconds", None)
+                payload.setdefault("last_run_seconds", None)
+                if status in TERMINAL_PROMPT_STATUSES:
+                    payload["last_finished_at"] = payload.get("last_finished_at") or payload.get("updated_at")
+                else:
+                    payload["last_finished_at"] = payload.get("last_finished_at")
+                record = PromptRecord(**payload)
+                self._records[prompt_id] = record
+                self._increment_status(record.status)
+                if record.status == "queued":
                     self._pending.put(prompt_id)
-                elif payload.get("status") == "running":
+                elif record.status == "running":
                     self._stale_running.append(prompt_id)
 
     def _persist(self) -> None:
         with self._lock:
             serialized = {pid: asdict(rec) for pid, rec in self._records.items()}
         self.db_path.write_text(json.dumps(serialized, indent=2) + "\n", encoding="utf-8")
+
+    def _rebuild_duration_history(self) -> None:
+        with self._lock:
+            self._recent_durations.clear()
+            self._recent_wait_sum = 0.0
+            self._recent_run_sum = 0.0
+            self._recent_wait_count = 0
+            self._recent_run_count = 0
+            finished_records = sorted(
+                (
+                    record
+                    for record in self._records.values()
+                    if record.last_finished_at and (record.last_wait_seconds is not None or record.last_run_seconds is not None)
+                ),
+                key=lambda record: record.last_finished_at,
+            )
+            for record in finished_records[-self._duration_window :]:
+                self._append_duration_sample(record.last_wait_seconds, record.last_run_seconds)
+
+    def _append_duration_sample(
+        self,
+        wait_seconds: Optional[float],
+        run_seconds: Optional[float],
+    ) -> None:
+        while len(self._recent_durations) >= self._duration_window:
+            old_wait, old_run = self._recent_durations.popleft()
+            if old_wait is not None:
+                self._recent_wait_sum -= old_wait
+                self._recent_wait_count = max(0, self._recent_wait_count - 1)
+            if old_run is not None:
+                self._recent_run_sum -= old_run
+                self._recent_run_count = max(0, self._recent_run_count - 1)
+        self._recent_durations.append((wait_seconds, run_seconds))
+        if wait_seconds is not None:
+            self._recent_wait_sum += wait_seconds
+            self._recent_wait_count += 1
+        if run_seconds is not None:
+            self._recent_run_sum += run_seconds
+            self._recent_run_count += 1
+
+    def _increment_status(self, status: str) -> None:
+        self._status_counts[status] = self._status_counts.get(status, 0) + 1
+
+    def _decrement_status(self, status: str) -> None:
+        current = self._status_counts.get(status, 0) - 1
+        if current <= 0:
+            self._status_counts.pop(status, None)
+        else:
+            self._status_counts[status] = current
+
+    def _change_status(self, record: PromptRecord, new_status: str) -> None:
+        if record.status == new_status:
+            return
+        self._decrement_status(record.status)
+        record.status = new_status
+        self._increment_status(new_status)
 
     def _recover_inflight_prompts(self) -> None:
         if not self._stale_running:
@@ -412,10 +769,8 @@ class PromptStore:
                 continue
             interrupted_at = utcnow_iso()
             summary = "Prompt interrupted when backend restarted; marked as failed"
-            record.status = "failed"
-            record.updated_at = interrupted_at
-            record.result_summary = summary
             self._append_interrupted_attempt(record, summary, interrupted_at)
+            self._update(prompt_id, status="failed", result_summary=summary, timestamp=interrupted_at)
             recovered.append(prompt_id)
             if self._logger:
                 self._logger.warning(
@@ -423,7 +778,6 @@ class PromptStore:
                 )
         if recovered:
             self._recovered_prompt_ids.extend(recovered)
-            self._persist()
         self._stale_running.clear()
 
     def _append_interrupted_attempt(
@@ -455,17 +809,20 @@ class PromptStore:
         prompt_id = uuid.uuid4().hex
         log_path = str(LOG_DIR / f"prompt_{prompt_id}.log")
         normalized_project = self._normalize_project_id(project_id)
+        now = utcnow_iso()
         record = PromptRecord(
             prompt_id=prompt_id,
             text=text,
             status="queued",
-            created_at=utcnow_iso(),
-            updated_at=utcnow_iso(),
+            created_at=now,
+            updated_at=now,
+            enqueued_at=now,
             log_path=log_path,
             project_id=normalized_project,
         )
         with self._lock:
             self._records[prompt_id] = record
+            self._increment_status(record.status)
         self._pending.put(prompt_id)
         self._persist()
         return record
@@ -495,12 +852,85 @@ class PromptStore:
     def pending_count(self) -> int:
         return self._pending.qsize()
 
+    def status_counts(self) -> Dict[str, int]:
+        with self._lock:
+            return {status: self._status_counts.get(status, 0) for status in PROMPT_STATUSES}
+
+    def oldest_prompt_info(self, status: str) -> Optional[Dict[str, Any]]:
+        if status not in {"queued", "running"}:
+            return None
+        with self._lock:
+            target: Optional[PromptRecord] = None
+            target_timestamp: Optional[str] = None
+            for record in self._records.values():
+                if record.status != status:
+                    continue
+                timestamp = record.enqueued_at if status == "queued" else record.started_at
+                if not timestamp:
+                    continue
+                if not target_timestamp or timestamp < target_timestamp:
+                    target = record
+                    target_timestamp = timestamp
+            if not target or not target_timestamp:
+                return None
+        age = seconds_since(target_timestamp)
+        payload = {
+            "prompt_id": target.prompt_id,
+            "timestamp": target_timestamp,
+        }
+        if age is not None:
+            payload["age_seconds"] = age
+        return payload
+
+    def duration_stats(self) -> Dict[str, Any]:
+        with self._lock:
+            samples = list(self._recent_durations)
+            wait_average = (
+                self._recent_wait_sum / self._recent_wait_count if self._recent_wait_count else None
+            )
+            run_average = (
+                self._recent_run_sum / self._recent_run_count if self._recent_run_count else None
+            )
+            wait_values = [wait for wait, _ in samples if wait is not None]
+            run_values = [run for _, run in samples if run is not None]
+        wait_max = max(wait_values) if wait_values else None
+        run_max = max(run_values) if run_values else None
+        return {
+            "window": self._duration_window,
+            "samples": len(samples),
+            "wait": {
+                "average": wait_average,
+                "max": wait_max,
+                "count": len(wait_values),
+            },
+            "run": {
+                "average": run_average,
+                "max": run_max,
+                "count": len(run_values),
+            },
+        }
+
+    def health_snapshot(self) -> Dict[str, Any]:
+        status_counts = self.status_counts()
+        return {
+            "status_counts": status_counts,
+            "oldest": {
+                "queued": self.oldest_prompt_info("queued"),
+                "running": self.oldest_prompt_info("running"),
+            },
+            "durations": self.duration_stats(),
+        }
+
     def begin_attempt(self, prompt_id: str) -> PromptRecord:
         with self._lock:
             record = self._records[prompt_id]
+            start_time = utcnow_iso()
+            wait_seconds = seconds_between(record.enqueued_at, start_time)
             record.attempts += 1
-            record.status = "running"
-            record.updated_at = utcnow_iso()
+            self._change_status(record, "running")
+            record.started_at = start_time
+            record.current_wait_seconds = wait_seconds
+            record.updated_at = start_time
         self._persist()
         return record
 
@@ -526,8 +956,12 @@ class PromptStore:
                 raise KeyError(prompt_id)
             if record.status == "running":
                 raise ValueError("prompt still running")
-            record.status = "queued"
-            record.updated_at = utcnow_iso()
+            now = utcnow_iso()
+            self._change_status(record, "queued")
+            record.enqueued_at = now
+            record.started_at = None
+            record.current_wait_seconds = None
+            record.updated_at = now
         self._pending.put(prompt_id)
         self._persist()
         return record
@@ -576,6 +1010,7 @@ class PromptStore:
             if record.status != "queued":
                 raise ValueError("prompt can only be deleted while queued")
             removed = self._records.pop(prompt_id)
+            self._decrement_status(removed.status)
         self._persist()
         log_path = Path(removed.log_path)
         try:
@@ -584,12 +1019,37 @@ class PromptStore:
             pass
         return removed
 
-    def _update(self, prompt_id: str, **updates: Any) -> None:
+    def _update(self, prompt_id: str, *, timestamp: Optional[str] = None, **updates: Any) -> None:
         with self._lock:
             record = self._records[prompt_id]
+            now = timestamp or utcnow_iso()
+            new_status = updates.get("status")
+            if new_status:
+                previous_status = record.status
+                self._change_status(record, new_status)
+                if new_status == "queued":
+                    record.enqueued_at = now
+                    record.started_at = None
+                    record.current_wait_seconds = None
+                elif new_status == "running":
+                    record.started_at = now
+                    record.current_wait_seconds = None
+                elif previous_status == "running":
+                    wait_seconds = record.current_wait_seconds
+                    run_seconds = seconds_between(record.started_at, now)
+                    record.last_wait_seconds = wait_seconds
+                    record.last_run_seconds = run_seconds
+                    record.last_finished_at = now
+                    record.started_at = None
+                    record.current_wait_seconds = None
+                    self._append_duration_sample(wait_seconds, run_seconds)
             for key, value in updates.items():
+                if key == "status":
+                    continue
                 setattr(record, key, value)
-            record.updated_at = utcnow_iso()
+            if new_status in TERMINAL_PROMPT_STATUSES:
+                record.last_finished_at = record.last_finished_at or now
+            record.updated_at = now
         self._persist()
 
     def next_prompt_id(self, timeout: float = 1.0) -> Optional[str]:
@@ -638,11 +1098,19 @@ class CodexRunner:
         prompt_text: str,
         context_text: str,
         log_path: Path,
+        *,
+        project_id: Optional[str] = None,
+        scope: Optional[ProjectScope] = None,
     ) -> tuple[str, bool, bool]:
-        cmd = [self.codex_bin, "exec", "--skip-git-repo-check"]
+        base_cmd = [self.codex_bin, "exec", "--skip-git-repo-check"]
         if self.sandbox_mode:
-            cmd.extend(["--sandbox", self.sandbox_mode])
-        cmd.append("-")
+            base_cmd.extend(["--sandbox", self.sandbox_mode])
+        base_cmd.append("-")
+        guard_script = REPO_ROOT / "scope_guard.py"
+        if guard_script.exists():
+            cmd = [sys.executable, str(guard_script), *base_cmd]
+        else:
+            cmd = base_cmd
         received_at = utcnow_iso()
         header = [
             f"Prompt received at {received_at}",
@@ -655,6 +1123,29 @@ class CodexRunner:
         ]
         log_lines = ["\n".join(header)]
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        scope_payload = scope.to_payload() if scope else {
+            "description": "Scope guard fallback: allow entire repository",
+            "allow": ["**"],
+            "deny": [],
+            "log_only": [],
+            "is_fallback": True,
+        }
+        scope_status_path = LOG_DIR / f"scope_guard_{prompt_id}.json"
+        try:
+            scope_status_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        env = os.environ.copy()
+        env.update(
+            {
+                "CODEX_SCOPE_MANIFEST": json.dumps(scope_payload),
+                "CODEX_SCOPE_PROMPT_ID": prompt_id,
+                "CODEX_SCOPE_PROJECT_ID": project_id or "",
+                "CODEX_SCOPE_STATUS_PATH": str(scope_status_path),
+                "CODEX_SCOPE_VIOLATION_LOG": str(LOG_DIR / "scope_violations.log"),
+                "CODEX_SCOPE_REPO_ROOT": str(self.repo_root),
+            }
+        )
         stdout_buffer: list[str] = []
         stderr_buffer: list[str] = []
         success = True
@@ -699,6 +1190,7 @@ class CodexRunner:
                     stderr=subprocess.PIPE,
                     text=True,
                     bufsize=1,
+                    env=env,
                 )
                 with self._lock:
                     self._active_process = process
@@ -742,6 +1234,18 @@ class CodexRunner:
 
         stdout_text = "".join(stdout_buffer)
         stderr_text = "".join(stderr_buffer)
+        violation_summary = ""
+        if scope_status_path.exists():
+            try:
+                payload = json.loads(scope_status_path.read_text(encoding="utf-8"))
+                violation_summary = str(payload.get("message") or "").strip()
+            except (OSError, json.JSONDecodeError):
+                violation_summary = "Scope guard violation detected"
+            finally:
+                try:
+                    scope_status_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
         elapsed_seconds = time.perf_counter() - start_time
         completed_at = utcnow_iso()
 
@@ -756,6 +1260,9 @@ class CodexRunner:
         if canceled:
             success = False
             summary = cancel_summary or summary or "Prompt canceled by user"
+        elif violation_summary:
+            success = False
+            summary = violation_summary
 
         attempt_status = "canceled" if canceled else ("completed" if success else "failed")
 
@@ -835,7 +1342,17 @@ class PromptWorker(threading.Thread):
             self.logger.info("Processing prompt %s", prompt_id)
             try:
                 context_text = build_prompt_context(record.project_id, self.store.project_registry)
-                summary, success, canceled = self.runner.run(prompt_id, record.text, context_text, log_path)
+                project_scope = None
+                if self.store.project_registry:
+                    project_scope = self.store.project_registry.resolved_scope_for_id(record.project_id)
+                summary, success, canceled = self.runner.run(
+                    prompt_id,
+                    record.text,
+                    context_text,
+                    log_path,
+                    project_id=record.project_id,
+                    scope=project_scope,
+                )
             finally:
                 with self._current_lock:
                     self._current_prompt_id = None
@@ -1214,10 +1731,12 @@ class EventStreamer:
         self.ws_manager.broadcast("prompt_deleted", payload, targets=targets)
 
     def broadcast_health(self, targets: Optional[Iterable[WebSocketConnection]] = None) -> None:
+        metrics = self.store.health_snapshot()
         payload = {
             "status": "ok",
             "timestamp": utcnow_iso(),
-            "pending": self.store.pending_count(),
+            "pending": metrics.get("status_counts", {}).get("queued", 0),
+            "metrics": metrics,
         }
         self.ws_manager.broadcast("health", payload, targets=targets)
 
@@ -1255,6 +1774,9 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args: Any, directory: Optional[str] = None, **kwargs: Any) -> None:
         self.current_user: Optional[AuthenticatedUser] = None
         super().__init__(*args, directory=str(FRONTEND_DIR), **kwargs)
+
+    def translate_path(self, path: str) -> str:
+        return super().translate_path(path)
 
     def _set_common_headers(self, status: int = 200, content_type: str = "application/json") -> None:
         self.send_response(status)
@@ -1315,10 +1837,13 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
         if not self._require_auth():
             return
         if self.path == "/api/health":
+            store: PromptStore = APP_CONTEXT["store"]
+            metrics = store.health_snapshot()
             payload = {
                 "status": "ok",
                 "timestamp": utcnow_iso(),
-                "pending": APP_CONTEXT['store'].pending_count(),
+                "pending": metrics.get("status_counts", {}).get("queued", 0),
+                "metrics": metrics,
                 "user": APP_CONTEXT["auth"].user_payload(self.current_user) if self.current_user else None,
             }
             self._write_json(payload)

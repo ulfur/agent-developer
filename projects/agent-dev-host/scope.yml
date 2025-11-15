@@ -1,0 +1,18 @@
+description: >
+  Updates to the Agent Dev Host platform span the backend, shared frontend shell, docs,
+  and project registry metadata but must not touch the project sandboxes themselves.
+allow:
+  - backend/**
+  - frontend/**
+  - docs/**
+  - projects/**
+  - scripts/**
+  - tests/**
+  - data/**
+  - agents.md
+  - README.md
+  - the_project.txt
+deny:
+  - frontend/projects/**
+log_only:
+  - logs/**

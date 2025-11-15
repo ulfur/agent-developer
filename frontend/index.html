@@ -343,6 +343,91 @@
         font-weight: 600;
       }
 
+      .queue-health-card {
+        padding: 1rem 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        background-color: var(--stream-bg);
+      }
+
+      .queue-health-card__header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .queue-health-card__status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+      }
+
+      .queue-health-chip {
+        font-weight: 600;
+        text-transform: none;
+      }
+
+      .queue-health-card__ages {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.75rem;
+      }
+
+      .queue-health-age {
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        padding: 0.5rem 0.75rem;
+        background-color: var(--prompt-bubble-bg);
+      }
+
+      .queue-health-age__label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+      }
+
+      .queue-health-age__value {
+        font-weight: 600;
+        font-size: 0.95rem;
+        display: block;
+        margin-top: 0.25rem;
+      }
+
+      .queue-health-card__durations {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.75rem;
+      }
+
+      .queue-health-duration {
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        padding: 0.5rem 0.75rem;
+        background-color: var(--app-surface);
+      }
+
+      .queue-health-duration__label {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .queue-health-duration__value {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        font-weight: 600;
+        margin-top: 0.25rem;
+      }
+
+      .queue-health-duration__value .duration-max {
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--text-muted);
+      }
+
       .queue-scroll {
         flex: 1 1 auto;
         min-height: 0;
@@ -1014,6 +1099,121 @@
         text-transform: none;
       }
 
+      .guided-tour-trigger {
+        text-transform: none;
+        font-weight: 600;
+      }
+
+      .guided-tour-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 4000;
+        pointer-events: none;
+      }
+
+      .guided-tour-highlight {
+        position: fixed;
+        border-radius: 18px;
+        border: 2px solid rgba(96, 165, 250, 0.95);
+        box-shadow:
+          0 20px 60px rgba(15, 23, 42, 0.35),
+          0 0 0 9999px rgba(8, 15, 33, 0.75);
+        transition: all 0.2s ease;
+        pointer-events: none;
+      }
+
+      .guided-tour-tooltip {
+        position: fixed;
+        left: 50%;
+        bottom: 32px;
+        transform: translateX(-50%);
+        max-width: min(520px, calc(100vw - 32px));
+        background: var(--app-surface);
+        color: var(--text-primary);
+        border-radius: 16px;
+        border: 1px solid var(--card-border);
+        padding: 1.25rem 1.5rem;
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.3);
+        pointer-events: auto;
+      }
+
+      .guided-tour-step-label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+        margin-bottom: 0.35rem;
+        display: block;
+      }
+
+      .guided-tour-tooltip h3 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      .guided-tour-tooltip p {
+        margin: 0.35rem 0 0;
+        line-height: 1.5;
+      }
+
+      .guided-tour-missing {
+        font-size: 0.9rem;
+        color: #fbbf24;
+      }
+
+      .guided-tour-actions {
+        margin-top: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .guided-tour-actions__spacer {
+        flex: 1;
+      }
+
+      .guided-tour-link {
+        background: transparent;
+        border: none;
+        padding: 0;
+        font: inherit;
+        color: #93c5fd;
+        cursor: pointer;
+        text-decoration: underline;
+      }
+
+      .guided-tour-link:focus-visible {
+        outline: 2px solid rgba(96, 165, 250, 0.5);
+        outline-offset: 2px;
+      }
+
+      .guided-tour-button {
+        border-radius: 999px;
+        border: 1px solid var(--card-border);
+        background: transparent;
+        color: var(--text-primary);
+        font: inherit;
+        padding: 0.35rem 1.25rem;
+        cursor: pointer;
+        transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+      }
+
+      .guided-tour-button:focus-visible {
+        outline: 2px solid rgba(96, 165, 250, 0.5);
+        outline-offset: 2px;
+      }
+
+      .guided-tour-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .guided-tour-button--primary {
+        background-color: #2563eb;
+        border-color: #2563eb;
+        color: #ffffff;
+      }
+
     </style>
   </head>
   <body>
@@ -1037,6 +1237,43 @@
       const PROMPT_AVERAGE_WINDOW = 20;
       const PROMPT_DURATION_STATUSES = new Set(['completed', 'failed', 'canceled']);
       const MOBILE_BREAKPOINT = 960;
+      const HEALTH_DURATION_WINDOW = 50;
+      const HEALTH_WAIT_THRESHOLD_SECONDS = 60;
+      const HEALTH_RUN_THRESHOLD_SECONDS = 600;
+      const HEALTH_STATUS_CHIPS = [
+        { key: 'queued', label: 'Queued', color: 'primary' },
+        { key: 'running', label: 'Running', color: 'info' },
+        { key: 'completed', label: 'Completed', color: 'success' },
+        { key: 'failed', label: 'Failed', color: 'error' },
+        { key: 'canceled', label: 'Canceled', color: 'warning' },
+      ];
+      const GUIDED_TOUR_PADDING = 16;
+      const GUIDED_TOUR_STEPS = [
+        {
+          id: 'project-focus',
+          target: '[data-tour-id=\"tour-project-selector\"]',
+          title: 'Focus Codex on the right project',
+          description: 'Pick which project Codex should care about. The focused project scopes prompts, context, and launch links.',
+        },
+        {
+          id: 'prompt-composer',
+          target: '[data-tour-id=\"tour-prompt-composer\"]',
+          title: 'Compose a new instruction',
+          description: 'Type what you want Codex to do, then press Send. Average turn duration helps you know how long you might wait.',
+        },
+        {
+          id: 'prompt-queue',
+          target: '[data-tour-id=\"tour-queue-list\"]',
+          title: 'Track the prompt queue',
+          description: 'Each entry shows status, timing, and a quick summary so you can jump into any task while it runs.',
+        },
+        {
+          id: 'prompt-thread',
+          target: '[data-tour-id=\"tour-thread-panel\"]',
+          title: 'Review Codex output',
+          description: 'The thread view holds your prompt, live stdout/stderr, and prior attempts—plus controls to edit, cancel, or retry.',
+        },
+      ];
 
       const createApiClient = (getToken, onUnauthorized) => {
         return async (path, options = {}) => {
@@ -1183,6 +1420,37 @@
           const activeMobilePanel = ref('queue');
           const isMobileLayout = computed(() => viewportWidth.value < MOBILE_BREAKPOINT);
           const isAuthenticated = computed(() => Boolean(authToken.value));
+          const guidedTourActive = ref(false);
+          const guidedTourStepIndex = ref(0);
+          const guidedTourHighlightRect = ref(null);
+          const guidedTourTargetMissing = ref(false);
+          const guidedTourCurrentStep = computed(() => GUIDED_TOUR_STEPS[guidedTourStepIndex.value] || null);
+          const guidedTourVisible = computed(() => guidedTourActive.value && Boolean(guidedTourCurrentStep.value));
+          const guidedTourStepNumber = computed(() => guidedTourStepIndex.value + 1);
+          const guidedTourTotalSteps = GUIDED_TOUR_STEPS.length;
+          const isGuidedTourLastStep = computed(() => guidedTourStepNumber.value >= guidedTourTotalSteps);
+          const canStartGuidedTour = computed(
+            () =>
+              isAuthenticated.value &&
+              activeView.value === 'queue' &&
+              !isMobileLayout.value &&
+              GUIDED_TOUR_STEPS.length > 0
+          );
+          const guidedTourHighlightStyle = computed(() => {
+            if (!guidedTourVisible.value || !guidedTourHighlightRect.value) {
+              return { display: 'none' };
+            }
+            const rect = guidedTourHighlightRect.value;
+            const padding = GUIDED_TOUR_PADDING;
+            const top = Math.max(0, rect.top - padding);
+            const left = Math.max(0, rect.left - padding);
+            return {
+              top: `${top}px`,
+              left: `${left}px`,
+              width: `${rect.width + padding * 2}px`,
+              height: `${rect.height + padding * 2}px`,
+            };
+          });
           const resetPasswordForm = () => {
             passwordForm.current = '';
             passwordForm.newValue = '';
@@ -1293,7 +1561,11 @@
           watch(isMobileLayout, (isMobile) => {
             if (!isMobile) {
               activeMobilePanel.value = 'queue';
+              refreshGuidedTourHighlight();
               return;
+            }
+            if (guidedTourActive.value) {
+              closeGuidedTour();
             }
             if (!selectedPrompt.value) {
               activeMobilePanel.value = 'queue';
@@ -1304,7 +1576,41 @@
             if (!prompt && isMobileLayout.value) {
               activeMobilePanel.value = 'queue';
             }
+            refreshGuidedTourHighlight();
           });
+
+          watch(guidedTourStepIndex, () => {
+            refreshGuidedTourHighlight();
+          });
+
+          watch(
+            () => guidedTourActive.value,
+            (active) => {
+              if (active) {
+                refreshGuidedTourHighlight();
+              } else {
+                guidedTourHighlightRect.value = null;
+                guidedTourTargetMissing.value = false;
+              }
+            }
+          );
+
+          watch(activeView, (view) => {
+            if (view !== 'queue' && guidedTourActive.value) {
+              closeGuidedTour();
+            } else {
+              refreshGuidedTourHighlight();
+            }
+          });
+
+          watch(
+            () => isAuthenticated.value,
+            (authed) => {
+              if (!authed && guidedTourActive.value) {
+                closeGuidedTour();
+              }
+            }
+          );
 
           const persistToken = (token) => {
             if (typeof window === 'undefined' || !window.localStorage) {
@@ -1662,6 +1968,21 @@
             const minutes = Math.floor(totalSeconds / 60);
             const remainingSeconds = totalSeconds % 60;
             return `${minutes}m ${remainingSeconds.toString().padStart(2, '0')}s`;
+          };
+
+          const describeOldestHealthEntry = (entry) => {
+            if (!entry) {
+              return { text: 'No prompts', title: '' };
+            }
+            const promptId = entry.prompt_id ? `#${entry.prompt_id.slice(0, 8)}` : 'Prompt';
+            const ageSeconds =
+              typeof entry.age_seconds === 'number' && Number.isFinite(entry.age_seconds) ? entry.age_seconds : null;
+            const ageText = ageSeconds != null ? `${formatQueueDuration(ageSeconds)} old` : 'Age unknown';
+            const timestampText = entry.timestamp ? formatTimestamp(entry.timestamp) : '';
+            return {
+              text: `${promptId} · ${ageText}`,
+              title: timestampText,
+            };
           };
 
           const normalizeWhitespace = (value) => {
@@ -2119,6 +2440,13 @@
               .filter(Boolean);
           });
 
+          watch(
+            () => queueEntries.value.length,
+            () => {
+              refreshGuidedTourHighlight();
+            }
+          );
+
           const averagePromptDurationSeconds = computed(() => {
             if (!queue.value.length) {
               return null;
@@ -2149,6 +2477,77 @@
             return formatQueueDuration(seconds);
           });
 
+          const healthMetrics = computed(() => (health.value && health.value.metrics) || null);
+
+          const healthStatusChips = computed(() => {
+            const metrics = healthMetrics.value;
+            if (!metrics) {
+              return [];
+            }
+            const counts = metrics.status_counts || {};
+            return HEALTH_STATUS_CHIPS.map((chip) => ({
+              ...chip,
+              count: counts?.[chip.key] ?? 0,
+            }));
+          });
+
+          const healthDurationStats = computed(() => (healthMetrics.value && healthMetrics.value.durations) || null);
+
+          const healthSampleSummary = computed(() => {
+            const durations = healthDurationStats.value;
+            if (!durations) {
+              return 'No recent samples';
+            }
+            const samples = durations.samples ?? 0;
+            const window = durations.window ?? HEALTH_DURATION_WINDOW;
+            if (!samples) {
+              return `Awaiting ${window} samples`;
+            }
+            return `Last ${samples} of ${window}`;
+          });
+
+          const oldestQueuedInfo = computed(() => describeOldestHealthEntry(healthMetrics.value?.oldest?.queued));
+          const oldestRunningInfo = computed(() => describeOldestHealthEntry(healthMetrics.value?.oldest?.running));
+
+          const waitDurationSummary = computed(() => {
+            const waitStats = healthDurationStats.value?.wait;
+            if (!waitStats) {
+              return '—';
+            }
+            const average = formatDuration(waitStats.average);
+            const max = formatDuration(waitStats.max);
+            return `${average} avg · ${max} max`;
+          });
+
+          const runDurationSummary = computed(() => {
+            const runStats = healthDurationStats.value?.run;
+            if (!runStats) {
+              return '—';
+            }
+            const average = formatDuration(runStats.average);
+            const max = formatDuration(runStats.max);
+            return `${average} avg · ${max} max`;
+          });
+
+          const waitThresholdExceeded = computed(() => {
+            const waitStats = healthDurationStats.value?.wait;
+            if (!waitStats || waitStats.max == null) {
+              return false;
+            }
+            return waitStats.max >= HEALTH_WAIT_THRESHOLD_SECONDS;
+          });
+
+          const runThresholdExceeded = computed(() => {
+            const runStats = healthDurationStats.value?.run;
+            if (!runStats || runStats.max == null) {
+              return false;
+            }
+            return runStats.max >= HEALTH_RUN_THRESHOLD_SECONDS;
+          });
+
+          const waitSampleCount = computed(() => healthDurationStats.value?.wait?.count ?? 0);
+          const runSampleCount = computed(() => healthDurationStats.value?.run?.count ?? 0);
+
           const canEditSelectedPrompt = computed(() => {
             if (!selectedPrompt.value) {
               return false;
@@ -2171,6 +2570,95 @@
           });
 
           const attemptKey = (attempt, index) => `${attempt.received_at || 'attempt'}-${index}`;
+
+          const resolveGuidedTourTarget = (step) => {
+            if (!step || typeof document === 'undefined') {
+              return null;
+            }
+            if (typeof step.target === 'function') {
+              try {
+                return step.target();
+              } catch (error) {
+                console.warn('Unable to resolve guided tour target', error);
+                return null;
+              }
+            }
+            if (typeof step.target === 'string' && step.target) {
+              return document.querySelector(step.target);
+            }
+            return null;
+          };
+
+          const updateGuidedTourHighlightRect = () => {
+            if (!guidedTourActive.value) {
+              guidedTourHighlightRect.value = null;
+              guidedTourTargetMissing.value = false;
+              return;
+            }
+            const step = guidedTourCurrentStep.value;
+            if (!step) {
+              guidedTourHighlightRect.value = null;
+              guidedTourTargetMissing.value = false;
+              return;
+            }
+            const target = resolveGuidedTourTarget(step);
+            if (!target) {
+              guidedTourHighlightRect.value = null;
+              guidedTourTargetMissing.value = true;
+              return;
+            }
+            const rect = target.getBoundingClientRect();
+            guidedTourHighlightRect.value = {
+              top: rect.top,
+              left: rect.left,
+              width: rect.width,
+              height: rect.height,
+            };
+            guidedTourTargetMissing.value = rect.width <= 0 || rect.height <= 0;
+          };
+
+          const refreshGuidedTourHighlight = () => {
+            if (!guidedTourActive.value) {
+              return;
+            }
+            nextTick(() => updateGuidedTourHighlightRect());
+          };
+
+          const startGuidedTour = () => {
+            if (!canStartGuidedTour.value || !GUIDED_TOUR_STEPS.length) {
+              return;
+            }
+            guidedTourStepIndex.value = 0;
+            guidedTourActive.value = true;
+            guidedTourTargetMissing.value = false;
+            refreshGuidedTourHighlight();
+          };
+
+          const closeGuidedTour = () => {
+            guidedTourActive.value = false;
+            guidedTourHighlightRect.value = null;
+            guidedTourTargetMissing.value = false;
+          };
+
+          const previousGuidedTourStep = () => {
+            if (guidedTourStepIndex.value === 0) {
+              return;
+            }
+            guidedTourStepIndex.value -= 1;
+            refreshGuidedTourHighlight();
+          };
+
+          const advanceGuidedTour = () => {
+            if (isGuidedTourLastStep.value) {
+              closeGuidedTour();
+              return;
+            }
+            guidedTourStepIndex.value = Math.min(
+              guidedTourStepIndex.value + 1,
+              Math.max(0, GUIDED_TOUR_STEPS.length - 1)
+            );
+            refreshGuidedTourHighlight();
+          };
 
           const copyToClipboard = async (value) => {
             const text = value == null ? '' : String(value);
@@ -2203,7 +2691,14 @@
 
           const handleWindowResize = () => {
             updateChatThreadHeight();
-             updateViewportWidth();
+            updateViewportWidth();
+            refreshGuidedTourHighlight();
+          };
+
+          const handleGuidedTourScroll = () => {
+            if (guidedTourActive.value) {
+              updateGuidedTourHighlightRect();
+            }
           };
 
           const scrollElementToBottom = (elementRef) => {
@@ -2823,6 +3318,7 @@
             if (typeof window !== 'undefined') {
               updateViewportWidth();
               window.addEventListener('resize', handleWindowResize);
+              window.addEventListener('scroll', handleGuidedTourScroll, true);
             }
             if (typeof window !== 'undefined' && window.localStorage) {
               try {
@@ -2851,6 +3347,7 @@
             }
             if (typeof window !== 'undefined') {
               window.removeEventListener('resize', handleWindowResize);
+              window.removeEventListener('scroll', handleGuidedTourScroll, true);
             }
           });
 
@@ -2872,6 +3369,17 @@
             loading,
             submitting,
             health,
+            healthMetrics,
+            healthStatusChips,
+            healthSampleSummary,
+            oldestQueuedInfo,
+            oldestRunningInfo,
+            waitDurationSummary,
+            runDurationSummary,
+            waitThresholdExceeded,
+            runThresholdExceeded,
+            waitSampleCount,
+            runSampleCount,
             retrying,
             canceling,
             restarting,
@@ -2901,6 +3409,18 @@
             openProject,
             showQueuePanel,
             showThreadPanel,
+            startGuidedTour,
+            closeGuidedTour,
+            previousGuidedTourStep,
+            advanceGuidedTour,
+            guidedTourVisible,
+            guidedTourHighlightStyle,
+            guidedTourStepNumber,
+            guidedTourTotalSteps,
+            guidedTourCurrentStep,
+            guidedTourTargetMissing,
+            isGuidedTourLastStep,
+            canStartGuidedTour,
             passwordForm,
             passwordChangeLoading,
             passwordChangeError,
@@ -2990,6 +3510,22 @@
                 </v-app-bar-title>
                 <v-spacer />
                 <div class="header-menus">
+                  <v-btn
+                    v-if="isAuthenticated"
+                    class="guided-tour-trigger"
+                    variant="tonal"
+                    size="small"
+                    prepend-icon="mdi-compass-outline"
+                    :title="
+                      canStartGuidedTour
+                        ? 'Step through what each panel does'
+                        : 'Guided tour is only available on the main dashboard in desktop layout'
+                    "
+                    :disabled="!canStartGuidedTour"
+                    @click="startGuidedTour"
+                  >
+                    Guided tour
+                  </v-btn>
                   <v-menu
                     v-if="projectOptions.length"
                     location="bottom end"
@@ -3033,7 +3569,7 @@
                     </v-card>
                   </v-menu>
                   <v-btn
-                    v-else
+                    v-if="!projectOptions.length"
                     class="projects-menu__activator"
                     variant="text"
                     density="comfortable"
@@ -3325,6 +3861,89 @@
                         </div>
                       </v-card-text>
                     </v-card>
+                    <v-card
+                      v-if="healthMetrics"
+                      elevation="0"
+                      class="panel-card mt-4"
+                    >
+                      <v-card-text class="pa-0">
+                        <div class="queue-health-card">
+                          <div class="queue-health-card__header">
+                            <div class="text-subtitle-2">Queue health</div>
+                            <v-chip size="x-small" variant="tonal" label class="queue-health-chip">
+                              {{ healthSampleSummary }}
+                            </v-chip>
+                          </div>
+                          <div class="queue-health-card__status">
+                            <v-chip
+                              v-for="chip in healthStatusChips"
+                              :key="chip.key"
+                              size="small"
+                              label
+                              class="queue-health-chip"
+                              :color="chip.color"
+                              variant="tonal"
+                            >
+                              {{ chip.label }} · {{ chip.count }}
+                            </v-chip>
+                          </div>
+                          <div class="queue-health-card__ages">
+                            <div class="queue-health-age">
+                              <div class="queue-health-age__label">Oldest queued</div>
+                              <div class="queue-health-age__value" :title="oldestQueuedInfo.title || ''">
+                                {{ oldestQueuedInfo.text }}
+                              </div>
+                            </div>
+                            <div class="queue-health-age">
+                              <div class="queue-health-age__label">Oldest running</div>
+                              <div class="queue-health-age__value" :title="oldestRunningInfo.title || ''">
+                                {{ oldestRunningInfo.text }}
+                              </div>
+                            </div>
+                          </div>
+                          <div class="queue-health-card__durations">
+                            <div class="queue-health-duration">
+                              <div class="queue-health-duration__label">Wait duration</div>
+                              <div class="queue-health-duration__value">
+                                <span>{{ waitDurationSummary }}</span>
+                                <span class="duration-max" v-if="waitSampleCount">
+                                  Samples {{ waitSampleCount }}
+                                </span>
+                                <v-chip
+                                  v-if="waitThresholdExceeded"
+                                  size="x-small"
+                                  label
+                                  variant="tonal"
+                                  color="warning"
+                                  prepend-icon="mdi-alert"
+                                >
+                                  Slow queue
+                                </v-chip>
+                              </div>
+                            </div>
+                            <div class="queue-health-duration">
+                              <div class="queue-health-duration__label">Run duration</div>
+                              <div class="queue-health-duration__value">
+                                <span>{{ runDurationSummary }}</span>
+                                <span class="duration-max" v-if="runSampleCount">
+                                  Samples {{ runSampleCount }}
+                                </span>
+                                <v-chip
+                                  v-if="runThresholdExceeded"
+                                  size="x-small"
+                                  label
+                                  variant="tonal"
+                                  color="error"
+                                  prepend-icon="mdi-trending-up"
+                                >
+                                  Long runs
+                                </v-chip>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </v-card-text>
+                    </v-card>
                   </v-col>
                   <v-col cols="12" md="7" lg="8">
                     <v-card elevation="0" class="panel-card log-card settings-log-card">
@@ -3404,7 +4023,7 @@
                           View task thread
                         </v-btn>
                       </div>
-                      <div class="project-selector">
+                      <div class="project-selector" data-tour-id="tour-project-selector">
                         <v-select
                           v-model="selectedProjectId"
                           :items="projectOptions"
@@ -3424,7 +4043,7 @@
                         </div>
                       </div>
                       <v-divider />
-                      <div class="queue-composer">
+                      <div class="queue-composer" data-tour-id="tour-prompt-composer">
                         <v-textarea
                           v-model="promptText"
                           placeholder="Type your next instruction to Codex"
@@ -3450,7 +4069,7 @@
                         </div>
                       </div>
                       <v-divider />
-                      <v-card-text class="queue-scroll">
+                      <v-card-text class="queue-scroll" data-tour-id="tour-queue-list">
                         <v-skeleton-loader v-if="loading" type="list-item@4" />
                         <div v-else class="queue-list">
                           <button
@@ -3489,7 +4108,7 @@
                     md="8"
                     class="d-flex flex-column"
                   >
-                    <v-card elevation="0" class="panel-card chat-card">
+                    <v-card elevation="0" class="panel-card chat-card" data-tour-id="tour-thread-panel">
                       <v-card-title class="chat-card__header justify-space-between align-start">
                         <div class="chat-card__header-main">
                           <div class="mobile-thread-nav" v-if="isMobileLayout">
@@ -3793,6 +4412,44 @@
               </v-container>
             </v-main>
             <router-view style="display: none;"></router-view>
+            <div
+              v-if="guidedTourVisible"
+              class="guided-tour-overlay"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Guided tour"
+            >
+              <div class="guided-tour-highlight" :style="guidedTourHighlightStyle" aria-hidden="true"></div>
+              <div class="guided-tour-tooltip">
+                <span class="guided-tour-step-label">
+                  Step {{ guidedTourStepNumber }} of {{ guidedTourTotalSteps }}
+                </span>
+                <h3>{{ guidedTourCurrentStep ? guidedTourCurrentStep.title : '' }}</h3>
+                <p>{{ guidedTourCurrentStep ? guidedTourCurrentStep.description : '' }}</p>
+                <p v-if="guidedTourTargetMissing" class="guided-tour-missing">
+                  Can't locate this panel? Make sure the dashboard is visible on a larger screen.
+                </p>
+                <div class="guided-tour-actions">
+                  <button type="button" class="guided-tour-link" @click="closeGuidedTour">Skip</button>
+                  <div class="guided-tour-actions__spacer"></div>
+                  <button
+                    type="button"
+                    class="guided-tour-button"
+                    :disabled="guidedTourStepNumber === 1"
+                    @click="previousGuidedTourStep"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    class="guided-tour-button guided-tour-button--primary"
+                    @click="advanceGuidedTour"
+                  >
+                    {{ isGuidedTourLastStep ? 'Finish tour' : 'Next' }}
+                  </button>
+                </div>
+              </div>
+            </div>
           </v-app>
         `,
       })

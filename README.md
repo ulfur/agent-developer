@@ -19,7 +19,7 @@ This repo hosts a lightweight proof-of-concept for an agent-accessible developme
 The backend binds to `0.0.0.0` by default; override `AGENT_HOST` and `AGENT_PORT` environment variables as needed.
 
 ## API Summary
-- `GET /api/health` – uptime + queue depth.
+- `GET /api/health` – queue observability payload (status counts, oldest queued/running prompts + timestamps, rolling wait/run stats).
 - `GET /api/prompts` – list of prompts (newest first).
 - `POST /api/prompts` – add a prompt (`{"prompt": "..."}`).
 - `GET /api/prompts/<id>` – prompt details + execution log.
@@ -28,6 +28,19 @@ The backend binds to `0.0.0.0` by default; override `AGENT_HOST` and `AGENT_PORT
 - `GET /api/logs` – contents of `logs/progress.log` (for future UI wiring).
 
 Responses are JSON and CORS-enabled, so you can script against them with other tools.
+
+## Queue Health Metrics
+`/api/health` now keeps operators in the loop even when they are off the UI. The payload includes:
+- `metrics.status_counts` – total prompts in each lifecycle bucket (`queued`, `running`, `completed`, `failed`, `canceled`).
+- `metrics.oldest.queued` / `.running` – the prompt ID, enqueue/start timestamp, and computed age for the oldest work in each phase.
+- `metrics.durations` – rolling averages and maxima for wait/run durations measured over the last 50 prompt completions (`window`/`samples` clarify how much data backs each number).
+
+The frontend “Queue Health” card mirrors the same data:
+- Status chips track counts per state so you can spot build-ups at a glance.
+- The “Oldest queued/running” tiles surface the prompt ID (prefixed with `#`) and how long it has been sitting untouched. If either tile freezes for more than a few minutes, the queue is effectively stuck—inspect that prompt’s log and unblock it.
+- Average/max wait and run durations are rendered under “Wait duration” and “Run duration”. When the backend sees any of the last 50 runs wait longer than 60s for a worker, a `Slow queue` badge appears. When a prompt runs for 10+ minutes, the UI shows a `Long runs` badge. Both are strong signals that the worker is wedged or an edit is looping.
+
+Because `/api/health` is broadcast over the WebSocket channel as well as the REST endpoint, you can watch for those badges programmatically. Paired with the prompt IDs in `metrics.oldest.*`, it becomes trivial to page an operator (or enqueue a cancel/retry prompt) before the entire queue stalls.
 
 ## CLI Prompt Helper
 Queueing something quickly from SSH is often easier than opening the Vue app.
@@ -42,7 +55,7 @@ a prompt at the backend:
 # Option 2: pipe multi-line text and reuse env vars for auth/host config
 export AGENT_EMAIL=ulfurk@ulfurk.com
 export AGENT_PASSWORD='dehost#1'
-cat prompt.txt | ./scripts/enqueue_prompt.py --project accgam
+cat prompt.txt | ./scripts/enqueue_prompt.py --project agent-dev-host
 ```
 
 Defaults come from `AGENT_HOST` (`127.0.0.1`), `AGENT_PORT` (`8080`), and
@@ -88,6 +101,23 @@ Until the real Codex CLI is available, the backend writes placeholder output to 
 - Extend persistence to a proper datastore before moving to production.
 - Add auth + TLS before exposing outside a trusted LAN.
 - For realtime UX, consider adding Server-Sent Events or WebSockets to broadcast prompt updates.
+
+## Project Scope Manifests
+- Each project folder under `projects/` now includes a `scope.yml` that declares its writable surface.
+  The manifest keys are `description`, `allow`, `deny`, and `log_only`, all encoded as simple YAML (or
+  JSON). `allow` lists glob patterns that are in scope, `deny` overrides those globs for shared
+  surfaces that must stay read-only, and `log_only` is reserved for append-only paths such as
+  `logs/progress.log`.
+- `backend/server.py` loads every manifest into the `ProjectRegistry`, surfaces the data via
+  `GET /api/projects`, and appends a “Scope guardrail” block to each prompt context so Codex sees the
+  explicit allow/deny lists alongside the project’s `context.md` / `agents.md` guidance.
+- If a project has no manifest yet, the registry falls back to a conservative guardrail that only
+  allows files inside that project’s folder. The guardrail text is marked as a fallback to remind
+  operators to author a manifest before expanding the writable surface.
+- Update the manifest whenever a project grows a new directory tree, needs to deny a previously
+  writable area, or wants to clarify which logs are append-only. The runtime guard described in
+  `docs/project_scope_enforcement.md` will consume these globs once enforcement lands, so accuracy
+  matters even today.
 
 ## Optional: 7.8" IT8591/IT8951 E‑Ink Status Display
 The backend can mirror the latest queue activity on a Waveshare 7.8" e‑ink HAT (IT8591/IT8951 controller) attached to a Raspberry Pi 5 via the LGPIO stack. The update path runs in a dedicated thread so prompt execution never blocks on display refreshes.
