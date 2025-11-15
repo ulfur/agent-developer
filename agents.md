@@ -35,6 +35,7 @@
 
 ## Prompt Lifecycle & Queue Management
 - Prompts are accepted via `POST /api/prompts` (`{"prompt": "...", "project_id": "…"}`) after authentication. They begin as `queued`, transition to `running`, then land on `completed`, `failed`, or `canceled`.
+- Operators can queue prompts without the UI through `scripts/enqueue_prompt.py`, which logs in (or accepts `AGENT_TOKEN`) and POSTs to `/api/prompts`.
 - Every attempt is appended to `logs/prompt_<id>.log` with sections for context, stdout, stderr, duration, and status. `build_prompt_payload` parses these logs so the UI can show attempt timelines.
 - Text edits: `PUT /api/prompts/<id>` rewrites queued/finished prompts. Deletions go through `DELETE /api/prompts/<id>`. Manual retries hit `/api/prompts/<id>/retry`.
 - Cancellation: `POST /api/prompts/<id>/cancel` stops a running attempt. Include `{"restart": true}` to requeue automatically once Codex confirms the cancel.

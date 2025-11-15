@@ -1,7 +1,0 @@
-{
-  "id": "accgam",
-  "name": "accgam",
-  "description": "A 3D tic-tac-toe playground rendered with Three.js and hosted alongside the agent tools.",
-  "contextFile": "context.md",
-  "launchPath": "/projects/accgam/index.html"
-}

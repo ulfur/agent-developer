@@ -6,4 +6,8 @@ data/.auth_secret
 data/users.json
 data/prompts.json
 data/ssh/
-projects/
+frontend/projects/
+
+projects/*
+!projects/README.md
+!projects/agent-dev-host/

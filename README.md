@@ -29,6 +29,26 @@ The backend binds to `0.0.0.0` by default; override `AGENT_HOST` and `AGENT_PORT
 
 Responses are JSON and CORS-enabled, so you can script against them with other tools.
 
+## CLI Prompt Helper
+Queueing something quickly from SSH is often easier than opening the Vue app.
+Use `scripts/enqueue_prompt.py` to log in (or reuse an existing token) and fire
+a prompt at the backend:
+
+```bash
+# Option 1: pass the prompt inline
+./scripts/enqueue_prompt.py "Check the latest deploy log" \
+  --email ulfurk@ulfurk.com --password 'dehost#1'
+
+# Option 2: pipe multi-line text and reuse env vars for auth/host config
+export AGENT_EMAIL=ulfurk@ulfurk.com
+export AGENT_PASSWORD='dehost#1'
+cat prompt.txt | ./scripts/enqueue_prompt.py --project accgam
+```
+
+Defaults come from `AGENT_HOST` (`127.0.0.1`), `AGENT_PORT` (`8080`), and
+`DEFAULT_PROJECT_ID`. Override the base URL entirely with `AGENT_API_URL` or
+`--url`, and set `AGENT_TOKEN` if you prefer to skip the login request.
+
 ### Manual retries
 Failed prompts stay in the queue history. Use the **Retry Prompt** button in the UI (or `POST /api/prompts/<id>/retry`) to requeue them once you’ve addressed the underlying issue.
 
