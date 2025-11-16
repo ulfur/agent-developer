@@ -11,10 +11,11 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 
 TITLE_FONT_CANDIDATES = (
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    # Prefer lighter weights so the header reads softer on the e-ink panel.
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 )
 
 BODY_FONT_CANDIDATES = (
@@ -25,10 +26,13 @@ BODY_FONT_CANDIDATES = (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-HEADER_ICON_CANDIDATES = (
-    PROJECT_ROOT / "frontend" / "nightshift-header-dark.png",
-    PROJECT_ROOT / "frontend" / "nightshift-header-light.png",
-)
+HEADER_ICON_VARIANTS = {
+    "dark": PROJECT_ROOT / "frontend" / "nightshift-header-dark.png",
+    "light": PROJECT_ROOT / "frontend" / "nightshift-header-light.png",
+}
+# Apply another 25% bump on top of the previous 50% increase (~87.5% over baseline).
+HEADER_ICON_ENLARGE_FACTOR = 1.5 * 1.25
+HEADER_ICON_BASE_SCALE = 1.05  # preserves the legacy scaling before enlargement
 
 
 class StatusRenderer:
@@ -39,8 +43,9 @@ class StatusRenderer:
         self.height = height
         self._title_font = self._load_font(size=84, candidates=TITLE_FONT_CANDIDATES)
         self._body_font = self._load_font(size=46, candidates=BODY_FONT_CANDIDATES)
-        self._header_logo = self._load_header_logo(int(self._title_font.size * 1.05))
-        self._logo_text_gap = max(20, self._title_font.size // 4)
+        logo_size = int(self._title_font.size * HEADER_ICON_BASE_SCALE * HEADER_ICON_ENLARGE_FACTOR)
+        self._header_logos = self._load_header_logos(logo_size)
+        self._logo_text_gap = max(12, logo_size // 6)
         self._margin = 56
         self._text_x = self._margin
         self._detail_indent = "   "
@@ -50,27 +55,57 @@ class StatusRenderer:
         self._max_detail_width = max(60, available_width - int(indent_width))
         self._line_spacing = self._body_font.size + 6
         self._footer_font = self._load_font(size=40, candidates=BODY_FONT_CANDIDATES)
-        self._footer_padding = self._footer_font.size + 24
+        self._footer_margin = max(18, self._margin // 3)
 
     def render(
         self,
         entries: Sequence[Mapping[str, str]],
         *,
         invert: bool = False,
+        pending_count: int | None = None,
+        human_notification_count: int | None = None,
     ) -> Image.Image:
         """Return a greyscale PIL image containing queue metadata."""
         canvas = Image.new("L", (self.width, self.height), color=0xFF)
         draw = ImageDraw.Draw(canvas)
         y = self._margin
-        content_bottom = max(self._margin + self._body_font.size, self.height - self._margin - self._footer_padding)
+        footer_space = self._footer_margin + self._footer_font.size
+        footer_block_top = self.height - footer_space
+        content_bottom = max(self._margin + self._body_font.size, footer_block_top - 10)
 
-        y = self._draw_header(canvas, draw, y)
+        y = self._draw_header(
+            canvas,
+            draw,
+            y,
+            invert,
+            pending_count=pending_count,
+            human_notification_count=human_notification_count,
+        )
 
-        for idx, record in enumerate(entries, start=1):
+        human_count = 0
+        agent_count = 0
+        divider_drawn = False
+        for record in entries:
             if y + self._body_font.size > content_bottom:
                 break
             status = (record.get("status") or "unknown").lower()
-            block_lines = self._format_entry(idx, record, status=status)
+            entry_type = str(record.get("entry_type") or "agent").lower()
+            is_human = entry_type == "human"
+            if is_human:
+                human_count += 1
+                display_idx = human_count
+            else:
+                if human_count > 0 and not divider_drawn:
+                    draw.line(
+                        (self._margin, y, self.width - self._margin, y),
+                        fill=0x00,
+                        width=2,
+                    )
+                    y += 12
+                    divider_drawn = True
+                agent_count += 1
+                display_idx = agent_count
+            block_lines = self._format_entry(display_idx, record, status=status)
             for line_idx, line in enumerate(block_lines):
                 draw.text((self._text_x, y), line, font=self._body_font, fill=0x00)
                 y += self._line_spacing
@@ -79,7 +114,7 @@ class StatusRenderer:
                 break
 
         footer_left, footer_right = self._build_footer_labels()
-        footer_y = self.height - self._margin - self._footer_font.size
+        footer_y = self.height - self._footer_margin - self._footer_font.size
         if footer_left:
             draw.text((self._margin, footer_y), footer_left, font=self._footer_font, fill=0x00)
         if footer_right:
@@ -198,9 +233,19 @@ class StatusRenderer:
             return target_font.getlength(text)
         return target_font.getsize(text)[0]
 
-    def _draw_header(self, canvas: Image.Image, draw: ImageDraw.ImageDraw, y: int) -> int:
+    def _draw_header(
+        self,
+        canvas: Image.Image,
+        draw: ImageDraw.ImageDraw,
+        y: int,
+        invert: bool,
+        *,
+        pending_count: int | None,
+        human_notification_count: int | None,
+    ) -> int:
         title = "Nightshift"
-        logo = self._header_logo
+        logo = self._select_header_logo(invert)
+        header_top = y
         if logo:
             canvas.paste(logo, (self._margin, y))
             text_x = self._margin + logo.width + self._logo_text_gap
@@ -211,7 +256,37 @@ class StatusRenderer:
             text_y = y
             header_height = self._title_font.size
         draw.text((text_x, text_y), title, font=self._title_font, fill=0x00)
+        stats_label = self._format_header_stats_label(pending_count, human_notification_count)
+        if stats_label:
+            stats_font = self._body_font
+            stats_width = self._measure_text(stats_label, font=stats_font)
+            stats_x = max(self._margin, self.width - self._margin - int(stats_width))
+            stats_y = header_top + max(0, (header_height - stats_font.size) // 2)
+            draw.text((stats_x, stats_y), stats_label, font=stats_font, fill=0x00)
         return y + header_height + 30
+
+    def _format_header_stats_label(
+        self,
+        pending_count: int | None,
+        human_notification_count: int | None,
+    ) -> str:
+        parts: list[str] = []
+        normalized_pending = self._normalize_count(pending_count)
+        normalized_human = self._normalize_count(human_notification_count)
+        if normalized_pending is not None:
+            parts.append(f"Pending: {normalized_pending}")
+        if normalized_human and normalized_human > 0:
+            parts.append(f"Human alerts: {normalized_human}")
+        return "   ".join(parts)
+
+    def _normalize_count(self, value: int | None) -> int | None:
+        if value is None:
+            return None
+        try:
+            numeric = int(value)
+        except (TypeError, ValueError):
+            return None
+        return max(0, numeric)
 
     def _parse_timestamp(self, value: str | None) -> dt.datetime | None:
         if not value:
@@ -250,7 +325,9 @@ class StatusRenderer:
     def _build_footer_labels(self) -> tuple[str, str]:
         ip_address = self._get_primary_ip() or "0.0.0.0"
         hostname = socket.gethostname() or "unknown"
-        left = f"{ip_address} / {hostname}"
+        suffix = ".local"
+        normalized_host = hostname if hostname.endswith(suffix) else f"{hostname}{suffix}"
+        left = f"{ip_address} / {normalized_host}"
         timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
         return left, timestamp
 
@@ -266,28 +343,44 @@ class StatusRenderer:
             except OSError:
                 return None
 
-    def _load_header_logo(self, base_size: int) -> Image.Image:
-        """Load the official header asset when available, else draw the fallback mark."""
-        logo = self._load_header_png(base_size)
-        if logo:
-            return logo
-        return self._render_fallback_logo(base_size)
+    def _select_header_logo(self, invert: bool) -> Image.Image | None:
+        """Return the grayscale header logo prepared for the target theme."""
+        logos = getattr(self, "_header_logos", {})
+        if not logos:
+            return None
+        primary = "dark" if invert else "light"
+        secondary = "light" if primary == "dark" else "dark"
+        candidate = logos.get(primary) or logos.get(secondary) or logos.get("fallback")
+        if not candidate:
+            return None
+        if invert:
+            return ImageOps.invert(candidate)
+        return candidate
 
-    def _load_header_png(self, base_size: int) -> Image.Image | None:
-        """Convert the Nightshift header PNG into a grayscale bitmap for e-ink."""
-        for candidate in HEADER_ICON_CANDIDATES:
-            if not candidate.exists():
-                continue
-            try:
-                with Image.open(candidate) as source:
-                    logo = source.convert("RGBA")
-            except OSError:
-                continue
-            if logo.size != (base_size, base_size):
-                logo = ImageOps.fit(logo, (base_size, base_size), method=Image.LANCZOS)
-            grayscale = ImageOps.autocontrast(ImageOps.grayscale(logo.convert("RGB")))
-            return grayscale
-        return None
+    def _load_header_logos(self, base_size: int) -> dict[str, Image.Image]:
+        """Load available header assets plus a fallback mark."""
+        logos: dict[str, Image.Image] = {}
+        for variant, path in HEADER_ICON_VARIANTS.items():
+            logo = self._load_header_png(path, base_size)
+            if logo:
+                logos[variant] = logo
+        if not logos:
+            logos["fallback"] = self._render_fallback_logo(base_size)
+        return logos
+
+    def _load_header_png(self, path: Path, base_size: int) -> Image.Image | None:
+        """Convert a Nightshift header PNG into a grayscale bitmap for e-ink."""
+        if not path.exists():
+            return None
+        try:
+            with Image.open(path) as source:
+                logo = source.convert("RGBA")
+        except OSError:
+            return None
+        if logo.size != (base_size, base_size):
+            logo = ImageOps.fit(logo, (base_size, base_size), method=Image.LANCZOS)
+        grayscale = ImageOps.autocontrast(ImageOps.grayscale(logo.convert("RGB")))
+        return grayscale
 
     def _render_fallback_logo(self, base_size: int) -> Image.Image:
         """Render the simplified fallback mark described in docs/nightshift-logo-spec.md."""

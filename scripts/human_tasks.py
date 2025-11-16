@@ -102,6 +102,18 @@ def parse_args() -> argparse.Namespace:
     resolve_parser = subparsers.add_parser("resolve", help="Mark a task as resolved and non-blocking.")
     resolve_parser.add_argument("task_id", help="Task id to resolve.")
 
+    clear_parser = subparsers.add_parser(
+        "clear",
+        help="Delete all human tasks or limit to specific statuses.",
+    )
+    clear_parser.add_argument(
+        "--status",
+        dest="statuses",
+        action="append",
+        choices=VALID_STATUSES,
+        help="Only remove tasks with this status. Repeat for multiple statuses.",
+    )
+
     return parser.parse_args()
 
 
@@ -314,6 +326,24 @@ def handle_resolve(args: argparse.Namespace, base_url: str, token: str) -> int:
     return 0
 
 
+def handle_clear(args: argparse.Namespace, base_url: str, token: str) -> int:
+    payload: Dict[str, Any] | None = None
+    if args.statuses:
+        payload = {"statuses": args.statuses}
+    data = request_api(
+        base_url,
+        "/api/human_tasks",
+        method="DELETE",
+        payload=payload,
+        token=token,
+        timeout=args.timeout,
+    )
+    cleared = data.get("cleared", 0)
+    suffix = "" if cleared == 1 else "s"
+    print(f"Cleared {cleared} human task{suffix}.")
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     base_url = build_base_url(args)
@@ -331,6 +361,8 @@ def main() -> int:
             return handle_delete(args, base_url, token)
         if args.command == "resolve":
             return handle_resolve(args, base_url, token)
+        if args.command == "clear":
+            return handle_clear(args, base_url, token)
         raise CLIError(f"Unknown command: {args.command}")
     except CLIError as exc:
         print(f"error: {exc}", file=sys.stderr)

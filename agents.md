@@ -34,6 +34,7 @@ These instructions apply to every prompt, regardless of which project is current
 - Leave log files intact so prior attempts remain auditable. Mention skipped tests or manual verifications inline with your changes.
 - When you close out a task, drop a fresh prompt onto the queue that spells out the next chunk of work (or explicitly say "no follow-up needed"). The pipeline stays busy only if we keep feeding it.
 - Keep an eye on the “Queue Health” card (or `/api/health.metrics`). Status chips show how many prompts are `queued`/`running`, the “Oldest queued/running” tiles list the prompt IDs that have been waiting the longest, and the badges warn when wait times exceed 60 s (`Slow queue`) or runs last longer than 10 minutes (`Long runs`). If those badges appear or the oldest prompt IDs stop changing, treat the queue as stuck: inspect that prompt’s log, cancel/retry as needed, and only then add new work.
+- Codex now runs with `--search`, so when the prompt calls for research, use web search inside the Codex session and cite the sources you rely on in both the log and your final response.
 
 ### Prompt queue checklist (do this every time you add work)
 1. Re-read `ROADMAP.md` and any plan docs for the active project so the new prompt references the latest priorities and explicitly instructs future agents to keep doing the same (e.g., “start by reading ROADMAP.md”).

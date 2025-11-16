@@ -210,6 +210,7 @@ Environment variables (all optional apart from `ENABLE_EINK_DISPLAY`):
 | `EINK_RST_PIN`, `EINK_BUSY_PIN`, `EINK_CS_PIN` | `17`, `24`, `8` | BCM pins for reset/busy/chip-select. |
 | `EINK_VCOM_MV` | `1800` | VCOM (mV) applied to the panel. Adjust per display. |
 | `EINK_ROTATE` | `180` | Display rotation (0/90/180/270). Defaults to 180° for upside-down mounting. |
+| `CODEX_ENABLE_SEARCH` | `1` | Append `--search` when launching Codex (set to `0` to disable). |
 | `EINK_ROTATE` | `180` | Rotation in degrees (0/90/180/270). `180` flips the panel for upside-down mounting. |
 
 When enabled, the screen shows the most recent tasks (status, snippet, and last update time) immediately after every run, in addition to a running pending-count indicator.

@@ -137,6 +137,21 @@ class HumanTaskStore:
         trimmed = str(prompt_id).strip()
         return trimmed or None
 
+    def _normalize_status_filter(self, statuses: Optional[Iterable[str]]) -> set[str]:
+        normalized: set[str] = set()
+        if not statuses:
+            return normalized
+        for status in statuses:
+            if status is None:
+                continue
+            value = str(status).strip().lower()
+            if not value:
+                continue
+            if value not in VALID_HUMAN_TASK_STATUSES:
+                raise ValueError(f"invalid status filter: {status}")
+            normalized.add(value)
+        return normalized
+
     def _generate_id(self) -> str:
         return uuid.uuid4().hex
 
@@ -281,6 +296,23 @@ class HumanTaskStore:
             "revision": summary.get("revision"),
         }
         return payload
+
+    def clear_tasks(self, *, statuses: Optional[Iterable[str]] = None) -> int:
+        """Remove all tasks, optionally constrained to a set of statuses."""
+        status_filter = self._normalize_status_filter(statuses)
+        with self._lock:
+            if status_filter:
+                task_ids = [task_id for task_id, record in self._records.items() if record.status in status_filter]
+            else:
+                task_ids = list(self._records.keys())
+            removed = len(task_ids)
+            if not removed:
+                return 0
+            for task_id in task_ids:
+                del self._records[task_id]
+            self._revision += 1
+        self._persist()
+        return removed
 
 
 def build_human_task_payload(record: HumanTaskRecord, registry: Optional["ProjectRegistry"]) -> Dict[str, Any]:

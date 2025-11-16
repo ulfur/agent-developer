@@ -195,16 +195,24 @@
         flex: 0 0 auto;
       }
 
-      .mobile-thread-nav,
+      .chat-card-human-task {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-top: 0.35rem;
+      }
+
+      .chat-card-human-task .mdi {
+        font-size: 1rem;
+      }
+
       .mobile-panel-controls {
         display: none;
       }
 
-      .mobile-thread-back {
-        text-transform: none;
-      }
-
-      @media (max-width: 640px) {
+      @media (max-width: 959px) {
         .chat-card__header {
           flex-direction: column;
           align-items: flex-start;
@@ -215,9 +223,13 @@
           width: 100%;
           justify-content: flex-start;
         }
-      }
 
-      @media (max-width: 959px) {
+        .chat-card-title__heading {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.4rem;
+        }
+
         .mobile-panel-controls {
           display: flex;
           width: 100%;
@@ -227,16 +239,6 @@
 
         .mobile-panel-controls .v-btn {
           text-transform: none;
-        }
-
-        .mobile-thread-nav {
-          display: flex;
-          width: 100%;
-          margin-bottom: 0.25rem;
-        }
-
-        .mobile-thread-back {
-          padding-left: 0;
         }
       }
 
@@ -424,6 +426,14 @@
         font-weight: 600;
       }
 
+      .human-task-entry__header-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
       .human-task-entry__meta {
         display: flex;
         flex-wrap: wrap;
@@ -438,13 +448,33 @@
         color: var(--text-primary);
       }
 
-      .human-task-entry__footer {
-        display: flex;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        font-size: 0.85rem;
-        color: var(--text-muted);
+      .human-task-entry__description-toggle {
+        border: none;
+        background: none;
+        color: #2563eb;
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin-left: 0.35rem;
+        padding: 0;
+      }
+
+      .human-task-entry__description-toggle:hover,
+      .human-task-entry__description-toggle:focus-visible {
+        text-decoration: underline;
+      }
+
+      .human-task-entry__description-toggle:focus-visible {
+        outline: 2px solid rgba(37, 99, 235, 0.35);
+        outline-offset: 2px;
+      }
+
+      .human-task-entry__clear-btn,
+      .human-task-entry__reply-btn {
+        min-width: 32px;
+        width: 32px;
+        height: 32px;
       }
 
       .human-tasks-panel__empty {
@@ -536,6 +566,19 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+
+      .queue-entry-human-task {
+        margin-top: 0.35rem;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.82rem;
+        color: var(--text-muted);
+      }
+
+      .queue-entry-human-task .mdi {
+        font-size: 0.95rem;
       }
 
       @media (max-width: 959px) {
@@ -733,17 +776,101 @@
         flex-shrink: 0;
       }
 
-      .average-prompt-time {
-        width: 100%;
+      .queue-composer--mobile {
+        padding: 0.75rem 1rem 1rem;
+      }
+
+      .queue-composer--mobile-collapsed {
+        padding-bottom: 0.75rem;
+      }
+
+      .mobile-composer-toggle {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 0.5rem;
       }
 
-      .average-prompt-time__value {
+      .mobile-composer-toggle__text {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .mobile-composer-toggle__title {
+        font-weight: 600;
+        font-size: 0.95rem;
+        margin-bottom: 0.1rem;
+      }
+
+      .mobile-composer-toggle__hint {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .mobile-composer-toggle__button {
+        flex-shrink: 0;
+      }
+
+      .queue-composer__body {
+        margin-top: 0.75rem;
+      }
+
+      .queue-composer:not(.queue-composer--mobile) .queue-composer__body {
+        margin-top: 0;
+      }
+
+      .human-task-reply-banner {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.45rem 0.75rem;
+        border-radius: 8px;
+        border: 1px solid var(--detail-panel-border);
+        background-color: rgba(103, 80, 164, 0.08);
+        color: var(--text-primary);
+        margin-bottom: 0.75rem;
+      }
+
+      .human-task-reply-banner__icon {
+        font-size: 1rem;
+        color: var(--primary-color, #6750a4);
+      }
+
+      .human-task-reply-banner__text {
+        flex: 1;
+        font-size: 0.9rem;
+      }
+
+      .human-task-reply-banner__text strong {
+        font-weight: 600;
+      }
+
+      .human-task-reply-banner__clear {
+        flex-shrink: 0;
+      }
+
+      .codex-status {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+      }
+
+      .codex-status__line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+
+      .codex-status__value {
         font-weight: 600;
         color: var(--text-primary);
+      }
+
+      .codex-status__error {
+        color: var(--v-theme-error, #de3730);
+        font-weight: 500;
       }
 
       .composer-actions {
@@ -928,6 +1055,16 @@
         letter-spacing: 0.01em;
       }
 
+      @media (max-width: 959px) {
+        .global-header__title {
+          display: none;
+        }
+
+        .global-header .guided-tour-trigger {
+          display: none;
+        }
+      }
+
       .header-notifications {
         display: flex;
         align-items: center;
@@ -947,6 +1084,8 @@
 
       .human-tasks-dropdown {
         width: min(420px, calc(100vw - 32px));
+        border-radius: 20px;
+        overflow: hidden;
       }
 
       .human-tasks-dropdown__footer {
@@ -1113,6 +1252,16 @@
       .chat-card-title__cancel,
       .chat-card-title__delete {
         flex-shrink: 0;
+      }
+
+      @media (max-width: 640px) {
+        .chat-card-title__task {
+          width: 100%;
+        }
+
+        .chat-card-title__cancel {
+          margin-left: auto;
+        }
       }
 
       .chat-card-subtitle {
@@ -1344,8 +1493,7 @@
       const WS_RECONNECT_MIN_MS = 1000;
       const WS_RECONNECT_MAX_MS = 10000;
       const LOG_REFRESH_INTERVAL_MS = 30000;
-      const PROMPT_AVERAGE_WINDOW = 20;
-      const PROMPT_DURATION_STATUSES = new Set(['completed', 'failed', 'canceled']);
+      const HUMAN_TASK_DESCRIPTION_PREVIEW_LIMIT = 220;
       const MOBILE_BREAKPOINT = 960;
       const GUIDED_TOUR_PADDING = 16;
       const GUIDED_TOUR_STEPS = [
@@ -1371,7 +1519,7 @@
           id: 'human-task-queue',
           target: '[data-tour-id=\"tour-human-tasks\"]',
           title: 'Spot blockers fast',
-          description: 'Human Tasks capture anything that needs an operator. Watch the notification badge and open the dropdown to review blockers logged via the CLI.',
+          description: 'Human Tasks capture anything that needs an operator. Watch the notification badge and open the dropdown to review blockers where the agent asks the operator for assistance.',
         },
         {
           id: 'prompt-thread',
@@ -1500,7 +1648,6 @@
           const nowTick = ref(Date.now());
           const loading = ref(true);
           const submitting = ref(false);
-          const headerIconRequesting = ref(false);
           const health = ref(null);
           const operationsLog = ref('');
           const logLoading = ref(false);
@@ -1510,8 +1657,13 @@
           const humanTasksSummary = ref({});
           const humanTasksError = ref('');
           const humanTasksLoading = ref(false);
+          const clearHumanTasksLoading = ref(false);
+          const clearingHumanTaskIds = ref(new Set());
+          const hasActiveHumanTaskClear = computed(() => clearingHumanTaskIds.value.size > 0);
           const humanTasksRevision = ref(null);
           const humanTasksMenuOpen = ref(false);
+          const humanTaskReplyTarget = ref(null);
+          const expandedHumanTaskDescriptions = ref({});
           const retrying = ref(false);
           const canceling = ref(false);
           const restarting = ref(false);
@@ -1573,6 +1725,7 @@
           const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : MOBILE_BREAKPOINT);
           const activeMobilePanel = ref('queue');
           const isMobileLayout = computed(() => viewportWidth.value < MOBILE_BREAKPOINT);
+          const mobileComposerExpanded = ref(!isMobileLayout.value);
           const isAuthenticated = computed(() => Boolean(authToken.value));
           const guidedTourActive = ref(false);
           const guidedTourStepIndex = ref(0);
@@ -1656,16 +1809,6 @@
             router.push({ name: 'queue' }).catch(() => {});
           };
 
-          const handleHeaderIconClick = (event) => {
-            if (event?.preventDefault) {
-              event.preventDefault();
-            }
-            if (isAuthenticated.value) {
-              queueHeaderIconRefreshTask();
-            }
-            goHome();
-          };
-
           const showQueuePanel = () => {
             if (isMobileLayout.value) {
               activeMobilePanel.value = 'queue';
@@ -1676,6 +1819,13 @@
             if (isMobileLayout.value) {
               activeMobilePanel.value = 'thread';
             }
+          };
+
+          const toggleMobileComposer = () => {
+            if (!isMobileLayout.value) {
+              return;
+            }
+            mobileComposerExpanded.value = !mobileComposerExpanded.value;
           };
 
           watch(
@@ -1715,10 +1865,12 @@
 
           watch(isMobileLayout, (isMobile) => {
             if (!isMobile) {
+              mobileComposerExpanded.value = true;
               activeMobilePanel.value = 'queue';
               refreshGuidedTourHighlight();
               return;
             }
+            mobileComposerExpanded.value = false;
             if (guidedTourActive.value) {
               closeGuidedTour();
             }
@@ -1732,6 +1884,18 @@
               activeMobilePanel.value = 'queue';
             }
             refreshGuidedTourHighlight();
+          });
+
+          watch(humanTaskReplyTarget, (target) => {
+            if (target && isMobileLayout.value) {
+              mobileComposerExpanded.value = true;
+            }
+          });
+
+          watch(promptText, (value) => {
+            if (value && isMobileLayout.value) {
+              mobileComposerExpanded.value = true;
+            }
           });
 
           watch(guidedTourStepIndex, () => {
@@ -2077,7 +2241,10 @@
             humanTasksRevision.value = null;
             humanTasksError.value = '';
             humanTasksLoading.value = false;
+            clearHumanTasksLoading.value = false;
             humanTasksMenuOpen.value = false;
+            humanTaskReplyTarget.value = null;
+            expandedHumanTaskDescriptions.value = {};
             if (message) {
               loginError.value = message;
             }
@@ -2441,6 +2608,7 @@
 
           const isFailedStatus = (status) => (status || '').toLowerCase() === 'failed';
           const isRunningStatus = (status) => (status || '').toLowerCase() === 'running';
+          const EDITABLE_PROMPT_STATUSES = new Set(['queued', 'failed', 'completed', 'canceled']);
 
           const attemptLogs = computed(() => {
             if (!selectedPrompt.value?.attempt_logs?.length) {
@@ -2620,28 +2788,6 @@
             }
           );
 
-          const averagePromptDurationSeconds = computed(() => {
-            if (!queue.value.length) {
-              return null;
-            }
-            const recentEntries = queue.value.slice(0, PROMPT_AVERAGE_WINDOW);
-            const durations = recentEntries
-              .map((item) => {
-                const status = (item.status || '').toLowerCase();
-                if (!PROMPT_DURATION_STATUSES.has(status)) {
-                  return null;
-                }
-                return computeRuntimeSeconds(item.created_at, item.updated_at);
-              })
-              .filter((seconds) => seconds != null);
-            if (!durations.length) {
-              return null;
-            }
-            const total = durations.reduce((sum, seconds) => sum + seconds, 0);
-            const average = total / durations.length;
-            return Number.isFinite(average) ? average : null;
-          });
-
           const humanTaskEntries = computed(() => {
             const entries = humanTasks.value.map((task) => {
               const normalizedStatus = (task?.status || '').toLowerCase();
@@ -2652,12 +2798,19 @@
                 (task?.project && typeof task.project === 'string' ? task.project : '') ||
                 'Unscoped';
               const description = normalizeWhitespace(task?.description || '');
-              const snippet = description.length > 220 ? `${description.slice(0, 219)}…` : description;
+              const hasDescription = Boolean(description);
+              const descriptionDisplay = hasDescription ? description : 'No description provided.';
+              const isTruncated = description.length > HUMAN_TASK_DESCRIPTION_PREVIEW_LIMIT;
+              const snippet = isTruncated
+                ? `${description.slice(0, HUMAN_TASK_DESCRIPTION_PREVIEW_LIMIT - 1)}…`
+                : descriptionDisplay;
               return {
                 ...task,
                 statusDisplay: formatHumanTaskStatus(normalizedStatus || task?.status),
                 projectDisplay: projectName,
-                descriptionSnippet: snippet || 'No description provided.',
+                descriptionSnippet: snippet,
+                descriptionFull: descriptionDisplay,
+                descriptionIsTruncated: isTruncated,
               };
             });
             return entries.sort((a, b) => {
@@ -2675,6 +2828,50 @@
               return 0;
             });
           });
+
+          const isHumanTaskDescriptionExpanded = (taskId) => {
+            if (!taskId) {
+              return false;
+            }
+            return Boolean(expandedHumanTaskDescriptions.value[taskId]);
+          };
+
+          const toggleHumanTaskDescription = (taskId) => {
+            if (!taskId) {
+              return;
+            }
+            const current = Boolean(expandedHumanTaskDescriptions.value[taskId]);
+            expandedHumanTaskDescriptions.value = {
+              ...expandedHumanTaskDescriptions.value,
+              [taskId]: !current,
+            };
+          };
+
+          watch(humanTasks, (tasks) => {
+            const current = expandedHumanTaskDescriptions.value;
+            const next = {};
+            tasks.forEach((task) => {
+              const id = task?.task_id;
+              if (id && current[id]) {
+                next[id] = true;
+              }
+            });
+            expandedHumanTaskDescriptions.value = next;
+          });
+
+          const formatHumanTaskReference = (task) => {
+            if (!task) {
+              return '';
+            }
+            const normalizedTitle = normalizeWhitespace(task.title || '');
+            if (normalizedTitle) {
+              return normalizedTitle;
+            }
+            if (task.task_id) {
+              return `Task ${task.task_id}`;
+            }
+            return 'Human task';
+          };
 
           const blockingHumanTaskCount = computed(() => {
             const summary = humanTasksSummary.value || {};
@@ -2741,19 +2938,37 @@
             return humanTasksBadgeState.value.label;
           });
 
-          const averagePromptDurationDisplay = computed(() => {
-            const seconds = averagePromptDurationSeconds.value;
-            if (seconds == null) {
-              return '—';
+          const normalizeCodexLimitLine = (limit, fallbackLabel) => {
+            if (!limit || typeof limit !== 'object') {
+              return null;
             }
-            return formatQueueDuration(seconds);
+            const label = String(limit.label || '').trim() || fallbackLabel;
+            const value = String(limit.value || '').trim();
+            return { label, value };
+          };
+
+          const codexStatusInfo = computed(() => {
+            const status = health.value?.codex_status;
+            if (!status || typeof status !== 'object') {
+              return null;
+            }
+            const result = {
+              error: typeof status.error === 'string' ? status.error : '',
+              fiveHour: normalizeCodexLimitLine(status.five_hour, '5h limit'),
+              weekly: normalizeCodexLimitLine(status.weekly, 'Weekly limit'),
+            };
+            if (!result.error && !result.fiveHour && !result.weekly) {
+              return null;
+            }
+            return result;
           });
 
           const canEditSelectedPrompt = computed(() => {
             if (!selectedPrompt.value) {
               return false;
             }
-            return (selectedPrompt.value.status || '').toLowerCase() === 'queued';
+            const status = (selectedPrompt.value.status || '').toLowerCase();
+            return EDITABLE_PROMPT_STATUSES.has(status);
           });
 
           const canCancelSelectedPrompt = computed(() => {
@@ -2965,11 +3180,8 @@
 
           watch(
             () => selectedPrompt.value?.status,
-            (status) => {
-              if (
-                editPromptDialogVisible.value &&
-                (status || '').toLowerCase() !== 'queued'
-              ) {
+            () => {
+              if (editPromptDialogVisible.value && !canEditSelectedPrompt.value) {
                 clearEditPromptState();
               }
             }
@@ -3007,15 +3219,17 @@
                 logLoading.value = false;
                 activeView.value = 'queue';
                 resetSettingsState();
-                humanTasks.value = [];
-                humanTasksSummary.value = {};
-                humanTasksRevision.value = null;
-                humanTasksError.value = '';
-                humanTasksLoading.value = false;
-              }
-            },
-            { immediate: true }
-          );
+              humanTasks.value = [];
+              humanTasksSummary.value = {};
+              humanTasksRevision.value = null;
+              humanTasksError.value = '';
+              humanTasksLoading.value = false;
+              humanTaskReplyTarget.value = null;
+              expandedHumanTaskDescriptions.value = {};
+            }
+          },
+          { immediate: true }
+        );
 
           watch(
             () => [isAuthenticated.value, route.name, route.params.promptId],
@@ -3091,6 +3305,12 @@
               const data = await api('/api/human_tasks');
               const items = Array.isArray(data?.tasks) ? data.tasks : [];
               humanTasks.value = items;
+              if (
+                humanTaskReplyTarget.value &&
+                !items.some((task) => task.task_id === humanTaskReplyTarget.value?.task_id)
+              ) {
+                humanTaskReplyTarget.value = null;
+              }
               if (data?.summary) {
                 humanTasksSummary.value = data.summary;
               }
@@ -3114,6 +3334,92 @@
 
           const refreshHumanTasks = () => {
             fetchHumanTasks().catch(() => {});
+          };
+
+          const updateClearingHumanTaskState = (taskId, isClearing) => {
+            if (!taskId) {
+              return;
+            }
+            const next = new Set(clearingHumanTaskIds.value);
+            if (isClearing) {
+              next.add(taskId);
+            } else {
+              next.delete(taskId);
+            }
+            clearingHumanTaskIds.value = next;
+          };
+
+          const isClearingHumanTask = (taskId) => {
+            if (!taskId) {
+              return false;
+            }
+            return clearingHumanTaskIds.value.has(taskId);
+          };
+
+          const clearHumanTasks = async () => {
+            if (
+              !isAuthenticated.value ||
+              clearHumanTasksLoading.value ||
+              hasActiveHumanTaskClear.value
+            ) {
+              return;
+            }
+            if (!humanTaskEntries.value.length) {
+              return;
+            }
+            let confirmed = true;
+            if (typeof window !== 'undefined' && window.confirm) {
+              confirmed = window.confirm('Clear all human tasks? This cannot be undone.');
+            }
+            if (!confirmed) {
+              return;
+            }
+            clearHumanTasksLoading.value = true;
+            humanTasksError.value = '';
+            try {
+              await api('/api/human_tasks', { method: 'DELETE' });
+              await fetchHumanTasks({ silent: true });
+            } catch (error) {
+              humanTasksError.value = error.message || 'Unable to clear human tasks';
+            } finally {
+              clearHumanTasksLoading.value = false;
+            }
+          };
+
+          const clearSingleHumanTask = async (taskId) => {
+            if (
+              !isAuthenticated.value ||
+              !taskId ||
+              isClearingHumanTask(taskId) ||
+              clearHumanTasksLoading.value
+            ) {
+              return;
+            }
+            updateClearingHumanTaskState(taskId, true);
+            humanTasksError.value = '';
+            try {
+              await api(`/api/human_tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+              await fetchHumanTasks({ silent: true });
+            } catch (error) {
+              humanTasksError.value = error.message || 'Unable to clear human task';
+            } finally {
+              updateClearingHumanTaskState(taskId, false);
+            }
+          };
+
+          const startHumanTaskReply = (task) => {
+            if (!isAuthenticated.value || !task || !task.task_id) {
+              return;
+            }
+            humanTaskReplyTarget.value = { ...task };
+            humanTasksMenuOpen.value = false;
+            if (isMobileLayout.value) {
+              activeMobilePanel.value = 'queue';
+            }
+          };
+
+          const clearHumanTaskReply = () => {
+            humanTaskReplyTarget.value = null;
           };
 
           watch(
@@ -3285,11 +3591,17 @@
               if (activeProjectId.value) {
                 payload.project_id = activeProjectId.value;
               }
+              if (humanTaskReplyTarget.value?.task_id) {
+                payload.human_task_id = humanTaskReplyTarget.value.task_id;
+              }
               const response = await api('/api/prompts', {
                 method: 'POST',
                 body: JSON.stringify(payload),
               });
               promptText.value = '';
+              if (humanTaskReplyTarget.value) {
+                humanTaskReplyTarget.value = null;
+              }
               if (response?.prompt_id) {
                 await selectPrompt({ prompt_id: response.prompt_id });
               }
@@ -3300,41 +3612,6 @@
               alert(error.message);
             } finally {
               submitting.value = false;
-            }
-          };
-
-          const queueHeaderIconRefreshTask = async () => {
-            if (!isAuthenticated.value || headerIconRequesting.value) {
-              return false;
-            }
-            headerIconRequesting.value = true;
-            const prompt = [
-              'Design refreshed Nightshift header icon and favicon assets.',
-              'Match the geometric neon style from frontend/logo.svg and frontend/favicon.svg, maintaining the dark theme palette.',
-              'Deliver SVG files for a 36x36 header icon and a 32x32 favicon, along with guidance on colors, stroke weights, spacing, and any simplified fallback marks.',
-              'Explain how to drop the new assets into the existing Vue/Vuetify header without additional layout changes.',
-            ].join(' ');
-            try {
-              const payload = { prompt };
-              if (activeProjectId.value) {
-                payload.project_id = activeProjectId.value;
-              }
-              const response = await api('/api/prompts', {
-                method: 'POST',
-                body: JSON.stringify(payload),
-              });
-              if (response?.prompt_id) {
-                await selectPrompt({ prompt_id: response.prompt_id });
-              }
-              if (!realtimeReady.value) {
-                await fetchPrompts({ silent: true });
-              }
-              return true;
-            } catch (error) {
-              alert(error.message || 'Unable to queue the branding refresh task');
-              return false;
-            } finally {
-              headerIconRequesting.value = false;
             }
           };
 
@@ -3715,7 +3992,6 @@
             promptText,
             queue,
             queueEntries,
-            averagePromptDurationDisplay,
             projectOptions,
             selectedProjectId,
             activeProjectLaunchUrl,
@@ -3725,18 +4001,30 @@
             selectedPrompt,
             isMobileLayout,
             activeMobilePanel,
+            mobileComposerExpanded,
             loading,
             submitting,
             health,
+            codexStatusInfo,
             humanTaskEntries,
             humanTasksLoading,
+            clearHumanTasksLoading,
+            hasActiveHumanTaskClear,
             humanTasksError,
             humanTasksBadgeState,
             humanTasksMenuLabel,
             humanTasksMenuOpen,
+            humanTaskReplyTarget,
+            toggleHumanTaskDescription,
+            isHumanTaskDescriptionExpanded,
             blockingHumanTaskCount,
             openHumanTaskCount,
             refreshHumanTasks,
+            clearHumanTasks,
+            clearSingleHumanTask,
+            startHumanTaskReply,
+            clearHumanTaskReply,
+            isClearingHumanTask,
             retrying,
             canceling,
             restarting,
@@ -3761,9 +4049,9 @@
             openSettingsView,
             returnToQueueView,
             goHome,
-            handleHeaderIconClick,
             showQueuePanel,
             showThreadPanel,
+            toggleMobileComposer,
             startGuidedTour,
             closeGuidedTour,
             previousGuidedTourStep,
@@ -3795,6 +4083,7 @@
             formatTimestamp,
             formatDuration,
             formatStatus,
+            formatHumanTaskReference,
             handleComposerKeydown,
             isAuthenticated,
             loginEmail,
@@ -3829,7 +4118,7 @@
                 <v-card-title>Edit Prompt</v-card-title>
                 <v-card-text>
                   <p class="text-body-2 text-medium-emphasis mb-3">
-                    Update the queued prompt before Nightshift begins processing it.
+                    Update the prompt text before rerunning or archiving it.
                   </p>
                   <v-alert v-if="editPromptError" type="error" variant="tonal" class="mb-3">
                     {{ editPromptError }}
@@ -3840,7 +4129,7 @@
                     rows="4"
                     auto-grow
                     hide-details
-                    placeholder="Revise the queued prompt text"
+                    placeholder="Revise the prompt text"
                   />
                 </v-card-text>
                 <v-card-actions>
@@ -3867,8 +4156,7 @@
                         class="global-header__logo"
                         width="36"
                         height="36"
-                        title="Request refreshed header icon & favicon"
-                        @click.stop.prevent="handleHeaderIconClick"
+                        title="Return to the main dashboard"
                       />
                       <span class="global-header__title">Nightshift</span>
                     </button>
@@ -3944,6 +4232,22 @@
                               Open {{ openHumanTaskCount }}
                             </v-chip>
                             <v-btn
+                              icon="mdi-delete-sweep-outline"
+                              size="small"
+                              variant="text"
+                              color="error"
+                              :loading="clearHumanTasksLoading"
+                              :disabled="
+                                humanTasksLoading ||
+                                clearHumanTasksLoading ||
+                                hasActiveHumanTaskClear ||
+                                !humanTaskEntries.length
+                              "
+                              @click="clearHumanTasks"
+                              aria-label="Clear human tasks"
+                              :title="humanTaskEntries.length ? 'Remove all human tasks' : 'No human tasks to clear'"
+                            ></v-btn>
+                            <v-btn
                               icon="mdi-refresh"
                               size="small"
                               variant="text"
@@ -3972,9 +4276,47 @@
                             <div v-for="task in humanTaskEntries" :key="task.task_id" class="human-task-entry">
                               <div class="human-task-entry__header">
                                 <span>{{ task.title }}</span>
-                                <span class="text-caption text-medium-emphasis">
-                                  {{ task.statusDisplay }}
-                                </span>
+                                <div class="human-task-entry__header-actions">
+                                  <v-chip
+                                    v-if="task.blocking"
+                                    size="x-small"
+                                    color="error"
+                                    variant="tonal"
+                                    label
+                                  >
+                                    Blocking
+                                  </v-chip>
+                                  <span class="text-caption text-medium-emphasis">
+                                    {{ task.statusDisplay }}
+                                  </span>
+                                  <v-btn
+                                    icon="mdi-reply"
+                                    size="x-small"
+                                    variant="text"
+                                    color="primary"
+                                    class="human-task-entry__reply-btn"
+                                    :disabled="humanTasksLoading || clearHumanTasksLoading"
+                                    @click.stop="startHumanTaskReply(task)"
+                                    aria-label="Reply to this human task"
+                                    :title="'Reply to ' + (task.title || 'task')"
+                                  ></v-btn>
+                                  <v-btn
+                                    icon="mdi-check-circle-outline"
+                                    size="x-small"
+                                    variant="text"
+                                    color="success"
+                                    class="human-task-entry__clear-btn"
+                                    :loading="isClearingHumanTask(task.task_id)"
+                                    :disabled="
+                                      humanTasksLoading ||
+                                      clearHumanTasksLoading ||
+                                      isClearingHumanTask(task.task_id)
+                                    "
+                                    @click="clearSingleHumanTask(task.task_id)"
+                                    aria-label="Clear this human task"
+                                    :title="'Clear ' + (task.title || 'task')"
+                                  ></v-btn>
+                                </div>
                               </div>
                               <div class="human-task-entry__meta">
                                 <span>{{ task.projectDisplay }}</span>
@@ -3982,31 +4324,40 @@
                                 <span>{{ formatTimestamp(task.updated_at) }}</span>
                               </div>
                               <p class="human-task-entry__description">
-                                {{ task.descriptionSnippet }}
-                              </p>
-                              <div class="human-task-entry__footer">
-                                <span>Created {{ formatTimestamp(task.created_at) }}</span>
-                                <v-chip
-                                  v-if="task.blocking"
-                                  size="x-small"
-                                  color="error"
-                                  variant="tonal"
-                                  label
+                                <span>
+                                  {{
+                                    isHumanTaskDescriptionExpanded(task.task_id)
+                                      ? task.descriptionFull
+                                      : task.descriptionSnippet
+                                  }}
+                                </span>
+                                <button
+                                  v-if="task.descriptionIsTruncated"
+                                  type="button"
+                                  class="human-task-entry__description-toggle"
+                                  @click.stop.prevent="toggleHumanTaskDescription(task.task_id)"
+                                  :aria-expanded="isHumanTaskDescriptionExpanded(task.task_id) ? 'true' : 'false'"
+                                  :aria-label="
+                                    (isHumanTaskDescriptionExpanded(task.task_id) ? 'Collapse' : 'Expand') +
+                                    ' human task description'
+                                  "
                                 >
-                                  Blocking
-                                </v-chip>
-                              </div>
+                                  {{
+                                    isHumanTaskDescriptionExpanded(task.task_id) ? 'Show less' : 'Show more'
+                                  }}
+                                </button>
+                              </p>
                             </div>
                           </div>
                           <div
                             v-else
                             class="human-tasks-panel__empty"
                           >
-                            No human tasks logged yet — use scripts/human_tasks.py to add blockers.
+                            No human tasks logged yet — add blockers whenever you need operator help.
                           </div>
                         </div>
                         <div class="human-tasks-panel__footer human-tasks-dropdown__footer">
-                          Logged blockers keep operators in the loop. Use <code>scripts/human_tasks.py</code> to add or resolve items.
+                          Logged blockers keep operators in the loop.
                         </div>
                       </div>
                     </v-card>
@@ -4032,7 +4383,7 @@
                         <v-list density="compact">
                           <v-list-item class="settings-menu-item" @click="openSettingsView">
                             <template #prepend>
-                              <span class="user-menu-icon mdi mdi-account-cog" aria-hidden="true"></span>
+                              <span class="user-menu-icon mdi mdi-cog" aria-hidden="true"></span>
                             </template>
                             <v-list-item-title>Settings</v-list-item-title>
                           </v-list-item>
@@ -4408,30 +4759,97 @@
                         </div>
                       </div>
                       <v-divider />
-                      <div class="queue-composer" data-tour-id="tour-prompt-composer">
-                        <v-textarea
-                          v-model="promptText"
-                          placeholder="Type your next instruction to Nightshift"
-                          variant="outlined"
-                          auto-grow
-                          rows="3"
-                          hide-details
-                          @keydown.enter="handleComposerKeydown"
-                        />
-                        <div class="composer-actions">
-                          <div class="text-caption text-medium-emphasis average-prompt-time" v-if="health">
-                            <span>Average prompt time</span>
-                            <span class="average-prompt-time__value">{{ averagePromptDurationDisplay }}</span>
+                      <div
+                        class="queue-composer"
+                        data-tour-id="tour-prompt-composer"
+                        :class="{
+                          'queue-composer--mobile': isMobileLayout,
+                          'queue-composer--mobile-collapsed': isMobileLayout && !mobileComposerExpanded,
+                        }"
+                      >
+                        <div v-if="isMobileLayout" class="mobile-composer-toggle">
+                          <div class="mobile-composer-toggle__text">
+                            <div class="mobile-composer-toggle__title">Prompt composer</div>
+                            <div class="mobile-composer-toggle__hint">
+                              {{ mobileComposerExpanded ? 'Hide input area' : 'Tap to add instructions' }}
+                            </div>
                           </div>
                           <v-btn
-                            color="primary"
-                            :loading="submitting"
-                            :disabled="!promptText.trim()"
-                            @click="submitPrompt"
+                            class="mobile-composer-toggle__button"
+                            variant="text"
+                            density="comfortable"
+                            size="small"
+                            :prepend-icon="mobileComposerExpanded ? 'mdi-chevron-up' : 'mdi-pencil'"
+                            @click="toggleMobileComposer"
                           >
-                            Send
+                            {{ mobileComposerExpanded ? 'Hide' : 'Compose' }}
                           </v-btn>
                         </div>
+                        <v-expand-transition>
+                          <div class="queue-composer__body" v-show="!isMobileLayout || mobileComposerExpanded">
+                            <div v-if="humanTaskReplyTarget" class="human-task-reply-banner">
+                              <span class="mdi mdi-account-question human-task-reply-banner__icon" aria-hidden="true"></span>
+                              <div class="human-task-reply-banner__text">
+                                Replying to
+                                <strong>{{ formatHumanTaskReference(humanTaskReplyTarget) }}</strong>
+                                <span v-if="humanTaskReplyTarget.projectDisplay">
+                                  · {{ humanTaskReplyTarget.projectDisplay }}
+                                </span>
+                              </div>
+                              <v-btn
+                                class="human-task-reply-banner__clear"
+                                variant="text"
+                                size="x-small"
+                                color="primary"
+                                @click="clearHumanTaskReply"
+                              >
+                                Cancel
+                              </v-btn>
+                            </div>
+                            <v-textarea
+                              v-model="promptText"
+                              :placeholder="
+                                humanTaskReplyTarget
+                                  ? 'Reply to ' + formatHumanTaskReference(humanTaskReplyTarget)
+                                  : 'Type your next instruction to Nightshift'
+                              "
+                              variant="outlined"
+                              auto-grow
+                              rows="3"
+                              hide-details
+                              @keydown.enter="handleComposerKeydown"
+                            />
+                            <div class="composer-actions">
+                              <div class="text-caption text-medium-emphasis codex-status" v-if="codexStatusInfo">
+                                <template v-if="codexStatusInfo.error">
+                                  <span class="codex-status__error">{{ codexStatusInfo.error }}</span>
+                                </template>
+                                <template v-else>
+                                  <div class="codex-status__line" v-if="codexStatusInfo.fiveHour">
+                                    <span>{{ codexStatusInfo.fiveHour.label }}</span>
+                                    <span class="codex-status__value">
+                                      {{ codexStatusInfo.fiveHour.value || '—' }}
+                                    </span>
+                                  </div>
+                                  <div class="codex-status__line" v-if="codexStatusInfo.weekly">
+                                    <span>{{ codexStatusInfo.weekly.label }}</span>
+                                    <span class="codex-status__value">
+                                      {{ codexStatusInfo.weekly.value || '—' }}
+                                    </span>
+                                  </div>
+                                </template>
+                              </div>
+                              <v-btn
+                                color="primary"
+                                :loading="submitting"
+                                :disabled="!promptText.trim()"
+                                @click="submitPrompt"
+                              >
+                                Send
+                              </v-btn>
+                            </div>
+                          </div>
+                        </v-expand-transition>
                       </div>
                       <v-divider />
                       <v-card-text class="queue-scroll" data-tour-id="tour-queue-list">
@@ -4459,6 +4877,13 @@
                             <div class="queue-entry-detail">
                               {{ entry.detailLine }}
                             </div>
+                            <div
+                              v-if="entry.human_task"
+                              class="queue-entry-human-task"
+                            >
+                              <span class="mdi mdi-account-question" aria-hidden="true"></span>
+                              <span>Reply to · {{ formatHumanTaskReference(entry.human_task) }}</span>
+                            </div>
                           </button>
                           <div v-if="!queueEntries.length" class="text-center text-medium-emphasis py-6">
                             No prompts yet — type a prompt above.
@@ -4476,17 +4901,6 @@
                     <v-card elevation="0" class="panel-card chat-card" data-tour-id="tour-thread-panel">
                       <v-card-title class="chat-card__header justify-space-between align-start">
                         <div class="chat-card__header-main">
-                          <div class="mobile-thread-nav" v-if="isMobileLayout">
-                            <v-btn
-                              class="mobile-thread-back"
-                              variant="text"
-                              density="comfortable"
-                              prepend-icon="mdi-arrow-left"
-                              @click="showQueuePanel"
-                            >
-                              Back to queue
-                            </v-btn>
-                          </div>
                           <div
                             class="chat-card-title__heading"
                             v-if="selectedPrompt"
@@ -4540,6 +4954,13 @@
                           <div class="text-caption text-medium-emphasis" v-else>
                             Select a prompt from the queue to review Nightshift output.
                           </div>
+                          <div
+                            v-if="selectedPrompt?.human_task"
+                            class="chat-card-human-task"
+                          >
+                            <span class="mdi mdi-account-question" aria-hidden="true"></span>
+                            <span>Reply to · {{ formatHumanTaskReference(selectedPrompt.human_task) }}</span>
+                          </div>
                         </div>
                         <div class="thread-header__actions">
                           <v-btn
@@ -4566,6 +4987,16 @@
                         </div>
                       </v-card-title>
                       <v-divider />
+                      <div v-if="isMobileLayout" class="mobile-panel-controls">
+                        <v-btn
+                          variant="tonal"
+                          size="small"
+                          prepend-icon="mdi-format-list-bulleted"
+                          @click="showQueuePanel"
+                        >
+                          Back to queue
+                        </v-btn>
+                      </div>
                       <div ref="chatThreadRef" class="chat-thread">
                         <div v-if="!selectedPrompt" class="text-medium-emphasis text-center py-10">
                           Waiting for a prompt selection...
@@ -4610,8 +5041,8 @@
                                   v-if="canEditSelectedPrompt"
                                   type="button"
                                   class="copy-button prompt-edit-button"
-                                  aria-label="Edit queued prompt"
-                                  title="Edit queued prompt"
+                                  aria-label="Edit prompt text"
+                                  title="Edit prompt text"
                                   @click.stop="openEditPromptDialog"
                                 >
                                   <span class="mdi mdi-pencil" aria-hidden="true"></span>

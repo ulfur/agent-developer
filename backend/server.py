@@ -58,6 +58,10 @@ APP_CONTEXT: Dict[str, Any] = {}
 PROMPT_DURATION_WINDOW = 50
 TERMINAL_PROMPT_STATUSES: set[str] = {"completed", "failed", "canceled"}
 PROMPT_STATUSES: tuple[str, ...] = ("queued", "running", "completed", "failed", "canceled")
+EDITABLE_PROMPT_STATUSES: set[str] = {"queued"} | TERMINAL_PROMPT_STATUSES
+CODEX_STATUS_CACHE_TTL_SECONDS = 120.0
+_CODEX_STATUS_CACHE: Dict[str, Any] = {"timestamp": 0.0, "payload": None}
+_CODEX_STATUS_LOCK = threading.Lock()
 
 
 def schedule_display_refresh(reason: str) -> None:
@@ -111,6 +115,100 @@ def seconds_since(timestamp: Optional[str]) -> Optional[float]:
         return None
     delta = (datetime.now(timezone.utc) - reference).total_seconds()
     return delta if delta >= 0 else 0.0
+
+
+def _extract_codex_limit_lines(text: str) -> tuple[Optional[str], Optional[str]]:
+    five_hour_line: Optional[str] = None
+    weekly_line: Optional[str] = None
+    if not text:
+        return five_hour_line, weekly_line
+    keywords_5h = ("5h", "5-hour", "5 hour", "five hour")
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        lowered = line.lower()
+        if five_hour_line is None and any(keyword in lowered for keyword in keywords_5h):
+            five_hour_line = line
+        if weekly_line is None and "week" in lowered:
+            weekly_line = line
+        if five_hour_line and weekly_line:
+            break
+    return five_hour_line, weekly_line
+
+
+def _format_codex_limit_line(line: Optional[str], fallback_label: str) -> Optional[Dict[str, str]]:
+    if not line:
+        return None
+    text = line.strip()
+    if not text:
+        return None
+    label = fallback_label
+    value = text
+    if ":" in text:
+        prefix, suffix = text.split(":", 1)
+        prefix = prefix.strip()
+        suffix = suffix.strip()
+        if prefix:
+            label = prefix
+        if suffix:
+            value = suffix
+    return {"label": label, "value": value}
+
+
+def _collect_codex_status_payload() -> Dict[str, Any]:
+    timestamp = utcnow_iso()
+    codex_bin = os.environ.get("CODEX_CLI", "codex")
+    command = [codex_bin, "/status"]
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except FileNotFoundError:
+        return {"error": "Codex CLI is not available", "fetched_at": timestamp}
+    except subprocess.TimeoutExpired:
+        return {"error": "Codex status request timed out", "fetched_at": timestamp}
+    except Exception as exc:  # pragma: no cover - defensive path
+        return {"error": f"Unable to query Codex status: {exc}", "fetched_at": timestamp}
+    stdout = completed.stdout.strip()
+    stderr = completed.stderr.strip()
+    five_line, weekly_line = _extract_codex_limit_lines(stdout)
+    payload: Dict[str, Any] = {
+        "fetched_at": timestamp,
+        "five_hour": _format_codex_limit_line(five_line, "5h limit"),
+        "weekly": _format_codex_limit_line(weekly_line, "Weekly limit"),
+    }
+    if stdout:
+        payload["raw_output"] = stdout
+    if completed.returncode != 0:
+        payload["error"] = stderr or f"Codex status exited with {completed.returncode}"
+    elif stderr:
+        payload["warning"] = stderr
+    return payload
+
+
+def get_codex_status(force_refresh: bool = False) -> Dict[str, Any]:
+    now = time.monotonic()
+    with _CODEX_STATUS_LOCK:
+        cached_payload = _CODEX_STATUS_CACHE.get("payload")
+        cached_timestamp = _CODEX_STATUS_CACHE.get("timestamp", 0.0)
+    if (
+        not force_refresh
+        and cached_payload
+        and isinstance(cached_timestamp, (int, float))
+        and now - cached_timestamp < CODEX_STATUS_CACHE_TTL_SECONDS
+    ):
+        return cached_payload
+    payload = _collect_codex_status_payload()
+    with _CODEX_STATUS_LOCK:
+        _CODEX_STATUS_CACHE["payload"] = payload
+        _CODEX_STATUS_CACHE["timestamp"] = time.monotonic()
+    return payload
 
 
 def ensure_dirs() -> None:
@@ -597,6 +695,22 @@ def _parse_attempt_chunk(chunk: str) -> dict[str, str] | None:
     }
 
 
+def _build_prompt_human_task_context(
+    record: "PromptRecord",
+    registry: Optional[ProjectRegistry],
+) -> Optional[Dict[str, Any]]:
+    task_id = getattr(record, "human_task_id", None)
+    if not task_id:
+        return None
+    human_store: Optional[HumanTaskStore] = APP_CONTEXT.get("human_tasks")
+    if not human_store:
+        return {"task_id": task_id}
+    task_record = human_store.get_task(task_id)
+    if not task_record:
+        return {"task_id": task_id}
+    return build_human_task_payload(task_record, registry)
+
+
 def build_prompt_payload(record: "PromptRecord", registry: Optional[ProjectRegistry] = None) -> Dict[str, Any]:
     """Return the full API payload for a single prompt record."""
     if registry is None:
@@ -623,6 +737,9 @@ def build_prompt_payload(record: "PromptRecord", registry: Optional[ProjectRegis
         payload["stdout_preview"] = extract_stdout_preview(record.log_path)
     else:
         payload["stdout_preview"] = ""
+    human_task_payload = _build_prompt_human_task_context(record, registry)
+    if human_task_payload:
+        payload["human_task"] = human_task_payload
     return payload
 
 
@@ -643,6 +760,7 @@ class PromptRecord:
     last_wait_seconds: Optional[float] = None
     last_run_seconds: Optional[float] = None
     last_finished_at: Optional[str] = None
+    human_task_id: Optional[str] = None
 
 
 class PromptStore:
@@ -686,6 +804,7 @@ class PromptStore:
                 status = str(payload.get("status") or "queued")
                 payload["status"] = status
                 payload["project_id"] = self._normalize_project_id(payload.get("project_id"))
+                payload["human_task_id"] = self._normalize_human_task_id(payload.get("human_task_id"))
                 payload["enqueued_at"] = (
                     payload.get("enqueued_at")
                     or payload.get("created_at")
@@ -814,10 +933,17 @@ class PromptStore:
             log_file.write("\n\n".join(log_lines))
             log_file.write("\n")
 
-    def add_prompt(self, text: str, project_id: Optional[str] = None) -> PromptRecord:
+    def add_prompt(
+        self,
+        text: str,
+        project_id: Optional[str] = None,
+        *,
+        human_task_id: Optional[str] = None,
+    ) -> PromptRecord:
         prompt_id = uuid.uuid4().hex
         log_path = str(LOG_DIR / f"prompt_{prompt_id}.log")
         normalized_project = self._normalize_project_id(project_id)
+        normalized_task = self._normalize_human_task_id(human_task_id)
         now = utcnow_iso()
         record = PromptRecord(
             prompt_id=prompt_id,
@@ -828,6 +954,7 @@ class PromptStore:
             enqueued_at=now,
             log_path=log_path,
             project_id=normalized_project,
+            human_task_id=normalized_task,
         )
         with self._lock:
             self._records[prompt_id] = record
@@ -841,16 +968,20 @@ class PromptStore:
             ordered = list(sorted(self._records.values(), key=lambda r: r.created_at, reverse=True))
 
         items: list[dict[str, Any]] = []
+        registry = self.project_registry or APP_CONTEXT.get("projects")
         for rec in ordered:
             payload = asdict(rec)
-            if self.project_registry:
-                project = self.project_registry.get(rec.project_id)
+            if registry:
+                project = registry.get(rec.project_id)
                 if project:
                     payload["project"] = project.to_payload()
             if rec.status == "completed":
                 payload["stdout_preview"] = extract_stdout_preview(rec.log_path)
             else:
                 payload["stdout_preview"] = ""
+            human_task_payload = _build_prompt_human_task_context(rec, registry)
+            if human_task_payload:
+                payload["human_task"] = human_task_payload
             items.append(payload)
         return {"items": items}
 
@@ -949,6 +1080,12 @@ class PromptStore:
         return self.project_registry.resolve_project_id(project_id)
         return record
 
+    def _normalize_human_task_id(self, task_id: Optional[str]) -> Optional[str]:
+        if task_id is None:
+            return None
+        cleaned = str(task_id).strip()
+        return cleaned or None
+
     def mark_completed(self, prompt_id: str, summary: str) -> None:
         self._update(prompt_id, status="completed", result_summary=summary)
 
@@ -983,7 +1120,7 @@ class PromptStore:
             record = self._records.get(prompt_id)
             if record is None:
                 raise KeyError(prompt_id)
-            if record.status not in {"queued", "failed", "completed", "canceled"}:
+            if record.status not in EDITABLE_PROMPT_STATUSES:
                 raise ValueError("cannot edit prompt while running")
             record.text = clean_text
             record.updated_at = utcnow_iso()
@@ -991,19 +1128,8 @@ class PromptStore:
         return record
 
     def edit_prompt(self, prompt_id: str, new_text: str) -> PromptRecord:
-        normalized = (new_text or "").strip()
-        if not normalized:
-            raise ValueError("prompt text is required")
-        with self._lock:
-            record = self._records.get(prompt_id)
-            if record is None:
-                raise KeyError(prompt_id)
-            if record.status != "queued":
-                raise ValueError("prompt can only be edited while queued")
-            record.text = normalized
-            record.updated_at = utcnow_iso()
-        self._persist()
-        return record
+        """Backwards-compatible wrapper for API prompt edits."""
+        return self.update_prompt_text(prompt_id, new_text)
 
     def consume_recovered_prompts(self) -> List[str]:
         with self._lock:
@@ -1078,6 +1204,7 @@ class CodexRunner:
         self.repo_root = repo_root
         self.codex_bin = os.environ.get("CODEX_CLI", "codex")
         self.sandbox_mode = os.environ.get("CODEX_SANDBOX")
+        self.enable_search = os.environ.get("CODEX_ENABLE_SEARCH", "1") not in {"0", "false", "False", ""}
         self.streamer = streamer
         self.logger = logger or logging.getLogger("codex_runner")
         self._lock = threading.Lock()
@@ -1123,7 +1250,10 @@ class CodexRunner:
         project_id: Optional[str] = None,
         scope: Optional[ProjectScope] = None,
     ) -> tuple[str, bool, bool]:
-        base_cmd = [self.codex_bin, "exec", "--skip-git-repo-check"]
+        base_cmd = [self.codex_bin]
+        if self.enable_search:
+            base_cmd.append("--search")
+        base_cmd.extend(["exec", "--skip-git-repo-check"])
         if self.sandbox_mode:
             base_cmd.extend(["--sandbox", self.sandbox_mode])
         base_cmd.append("-")
@@ -1401,9 +1531,10 @@ class PromptWorker(threading.Thread):
                 project_scope = None
                 if self.store.project_registry:
                     project_scope = self.store.project_registry.resolved_scope_for_id(record.project_id)
+                prompt_text = self._prepare_prompt_text(record)
                 summary, success, canceled = self.runner.run(
                     prompt_id,
-                    record.text,
+                    prompt_text,
                     context_text,
                     log_path,
                     project_id=record.project_id,
@@ -1480,6 +1611,35 @@ class PromptWorker(threading.Thread):
         self.event_streamer.broadcast_queue()
         self.event_streamer.broadcast_prompt(prompt_id)
         self.event_streamer.broadcast_health()
+
+    def _prepare_prompt_text(self, record: PromptRecord) -> str:
+        prompt_text = record.text
+        task_id = record.human_task_id
+        if not task_id:
+            return prompt_text
+        store: Optional[HumanTaskStore] = APP_CONTEXT.get("human_tasks")
+        task_title = ""
+        if store:
+            task_record = store.get_task(task_id)
+            if task_record and task_record.title:
+                task_title = self._inline_text(task_record.title)
+        reference_label = task_title or f"task {task_id}"
+        advisory_lines = [
+            f"This prompt is a reply to human task {reference_label}.",
+            f"Human task reference ID: {task_id}",
+            (
+                "Look up this human task entry (via the Human Tasks panel or scripts/human_tasks.py list) "
+                "to review the operator's notes, gather the full context, and decide on any follow-up actions "
+                "before concluding your response."
+            ),
+            "Call out in your update whether more follow-up work is needed.",
+        ]
+        advisory = "\n".join(advisory_lines)
+        return f"{advisory}\n\n---\n\n{prompt_text}"
+
+    @staticmethod
+    def _inline_text(value: str) -> str:
+        return " ".join(value.split())
 
 
 class WebSocketConnection:
@@ -1799,6 +1959,7 @@ class EventStreamer:
                 **prompt_metrics,
                 "human_tasks": task_metrics,
             },
+            "codex_status": get_codex_status(),
         }
         self.ws_manager.broadcast("health", payload, targets=targets)
 
@@ -1909,6 +2070,7 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 "pending": metrics.get("status_counts", {}).get("queued", 0),
                 "metrics": {**metrics, "human_tasks": human_metrics},
                 "user": APP_CONTEXT["auth"].user_payload(self.current_user) if self.current_user else None,
+                "codex_status": get_codex_status(),
             }
             self._write_json(payload)
         elif self.path == "/api/prompts":
@@ -1983,7 +2145,18 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 self._write_json({"error": "prompt is required"}, status=400)
                 return
             project_id = payload.get("project_id") or payload.get("project")
-            record = APP_CONTEXT["store"].add_prompt(text.strip(), project_id=project_id)
+            human_task_value = payload.get("human_task_id") or payload.get("human_task")
+            human_task_id = str(human_task_value).strip() if human_task_value is not None else ""
+            if human_task_id:
+                task_store: Optional[HumanTaskStore] = APP_CONTEXT.get("human_tasks")
+                if not task_store or not task_store.get_task(human_task_id):
+                    self._write_json({"error": "human task not found"}, status=404)
+                    return
+            record = APP_CONTEXT["store"].add_prompt(
+                text.strip(),
+                project_id=project_id,
+                human_task_id=human_task_id or None,
+            )
             APP_CONTEXT["audit_logger"].info("Queued prompt %s", record.prompt_id)
             schedule_display_refresh("queued")
             events: Optional[EventStreamer] = APP_CONTEXT.get("events")
@@ -2238,7 +2411,39 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
         if not self._require_auth():
             return
         clean_path = self.path.split("?", 1)[0]
-        if clean_path.startswith("/api/prompts/"):
+        normalized_path = clean_path.rstrip("/")
+        if normalized_path == "/api/human_tasks":
+            length = int(self.headers.get("Content-Length", 0))
+            payload = {}
+            if length:
+                body = self.rfile.read(length)
+                try:
+                    payload = json.loads(body or b"{}")
+                except json.JSONDecodeError:
+                    self._write_json({"error": "invalid json"}, status=400)
+                    return
+            statuses = []
+            if isinstance(payload.get("statuses"), list):
+                statuses.extend(payload.get("statuses") or [])
+            if "status" in payload and payload.get("status") not in statuses:
+                statuses.append(payload.get("status"))
+            store: HumanTaskStore = APP_CONTEXT["human_tasks"]
+            try:
+                cleared = store.clear_tasks(statuses=statuses or None)
+            except ValueError as exc:
+                self._write_json({"error": str(exc)}, status=400)
+                return
+            APP_CONTEXT["audit_logger"].info(
+                "Cleared %s human task(s)%s",
+                cleared,
+                f" (statuses={statuses})" if statuses else "",
+            )
+            events = APP_CONTEXT.get("events")
+            if events:
+                events.broadcast_health()
+            schedule_display_refresh("human-task-delete")
+            self._write_json({"cleared": cleared, "statuses": statuses or None})
+        elif clean_path.startswith("/api/prompts/"):
             prompt_id = clean_path.rstrip("/").rsplit("/", 1)[-1]
             if not prompt_id:
                 self._write_json({"error": "prompt_id required"}, status=400)
@@ -2368,6 +2573,7 @@ def start_display_manager(
     store: PromptStore,
     logger: logging.Logger,
     preferences: PreferenceStore | None,
+    human_tasks: HumanTaskStore | None,
 ):
     if not _env_flag("ENABLE_EINK_DISPLAY"):
         return None
@@ -2399,7 +2605,14 @@ def start_display_manager(
         vcom_mv=_env_int("EINK_VCOM_MV", 1800),
         rotate=_env_int("EINK_ROTATE", IT8951_ROTATE_180),
     )
-    manager = TaskQueueDisplayManager(store, logger, enabled=True, config=config, preferences=preferences)
+    manager = TaskQueueDisplayManager(
+        store,
+        logger,
+        enabled=True,
+        config=config,
+        preferences=preferences,
+        human_tasks=human_tasks,
+    )
     manager.start()
     return manager
 
@@ -2429,7 +2642,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
             events.broadcast_prompt(prompt_id)
         events.broadcast_health()
     runner = CodexRunner(REPO_ROOT, events, audit_logger)
-    display_manager = start_display_manager(store, audit_logger, preference_store)
+    display_manager = start_display_manager(store, audit_logger, preference_store, human_task_store)
     worker = PromptWorker(store, runner, audit_logger, display_manager, event_streamer=events)
     worker.start()
     health_thread = HealthBroadcaster(events)
