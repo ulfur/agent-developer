@@ -5,6 +5,14 @@ The dev servers, front and back, need to be acccessible over the network.
 The front end should be based on Vue3 and Vuetify.
 The backend can use whatever makes sense, Python or Node.
 
+Nightshift now packages both services as Docker containers. Operators bind-mount
+the repo into `/workspaces/nightshift` (along with any other project repos under
+`/workspaces/<project>`) and manage the stack via
+`./scripts/nightshift_compose.sh up|down|logs|smoke`. The helper exports the
+workspace paths before shelling out to `docker compose` so the Pi and cloud
+deployments share the exact same directory layout. Always run the smoke command
+after editing Dockerfiles or compose YAML to catch regressions before shipping.
+
 The system should be able to work on itself.
 The user should be able to input prompts via a text area in the front end.
 The back end should queue that prompt for running.
@@ -13,5 +21,4 @@ The back end should log all progress made and give codex some context for what i
 The project can maintain general project instructions in the standard agents.md and might keep a log of recent changes and updates in another file.
 The back end should provide codex with the tools for web searches and to run, test and debug code and data as well as provide access to previous prompts and change logs.
 The project can use git for any or all of its work tracking.
-
 

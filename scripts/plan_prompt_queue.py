@@ -155,6 +155,9 @@ class FilePromptQueue:
             "last_wait_seconds": None,
             "last_run_seconds": None,
             "last_finished_at": None,
+            "human_task_id": None,
+            "server_restart_required": False,
+            "server_restart_marked_at": None,
         }
         self.records[prompt_id] = record
         self._persist()

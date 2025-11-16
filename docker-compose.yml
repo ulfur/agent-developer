@@ -1,0 +1,70 @@
+name: nightshift
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    restart: unless-stopped
+    environment:
+      AGENT_HOST: ${AGENT_HOST:-0.0.0.0}
+      AGENT_PORT: ${AGENT_PORT:-8080}
+      DEFAULT_PROJECT_ID: ${DEFAULT_PROJECT_ID:-nightshift}
+      CODEX_CLI: ${CODEX_CLI:-codex}
+      CODEX_SANDBOX: ${CODEX_SANDBOX:-}
+      CODEX_ENABLE_SEARCH: ${CODEX_ENABLE_SEARCH:-1}
+      NIGHTSHIFT_REPO_PATH: /workspaces/nightshift
+      ENABLE_EINK_DISPLAY: ${ENABLE_EINK_DISPLAY:-0}
+      EINK_GPIO_CHIP: ${EINK_GPIO_CHIP:-0}
+      EINK_WIDTH: ${EINK_WIDTH:-1872}
+      EINK_HEIGHT: ${EINK_HEIGHT:-1404}
+      EINK_SPI_DEVICE: ${EINK_SPI_DEVICE:-0}
+      EINK_SPI_CHANNEL: ${EINK_SPI_CHANNEL:-0}
+      EINK_SPI_HZ: ${EINK_SPI_HZ:-24000000}
+      EINK_RST_PIN: ${EINK_RST_PIN:-17}
+      EINK_BUSY_PIN: ${EINK_BUSY_PIN:-24}
+      EINK_CS_PIN: ${EINK_CS_PIN:-8}
+      EINK_VCOM_MV: ${EINK_VCOM_MV:-1800}
+      EINK_ROTATE: ${EINK_ROTATE:-2}
+    volumes:
+      - type: bind
+        source: ${NIGHTSHIFT_REPO_HOST_PATH:-.}
+        target: /workspaces/nightshift
+      - type: bind
+        source: ${NIGHTSHIFT_WORKSPACES_HOST:-./workspaces}
+        target: /workspaces
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/health >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_HTTP_PORT:-8080}:80"
+  router:
+    image: traefik:v3.1
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${TRAEFIK_HTTP_PORT:-80}:80"
+      - "${TRAEFIK_HTTPS_PORT:-443}:443"
+    volumes:
+      - type: bind
+        source: ${TRAEFIK_STATIC_CONFIG:-./docker/traefik/traefik.yml}
+        target: /etc/traefik/traefik.yml
+        read_only: true
+      - type: bind
+        source: ${TRAEFIK_DYNAMIC_HOST_PATH:-./data/router}
+        target: /etc/traefik/dynamic
+      - type: bind
+        source: ${TRAEFIK_CERTS_HOST_PATH:-./data/router/certs}
+        target: /etc/traefik/certs

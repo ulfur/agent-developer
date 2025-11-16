@@ -15,6 +15,13 @@ These instructions apply to every prompt, regardless of which project is current
 - Keep project-specific facts inside that project’s folder so guidance stays scoped. If you find general expectations that apply to everyone, update this shared file instead.
 - Summarize each attempt in `logs/progress.log`. Include the prompt intent, key edits, skipped verifications, and remaining questions so future operators inherit context.
 
+## Container runtime expectations
+- The default way to run Nightshift is now Docker Compose. `docker/backend.Dockerfile`, `docker/frontend.Dockerfile`, and `docker-compose.yml` define the backend + nginx services, both of which mount `/workspaces`.
+- Use `./scripts/nightshift_compose.sh up|down|logs|smoke` whenever you need to manage containers locally or on remote hosts. The helper exports `NIGHTSHIFT_WORKSPACES_HOST`/`NIGHTSHIFT_REPO_HOST_PATH` before shelling out to `docker compose` so Pi and cloud installs share the same layout.
+- `/workspaces/nightshift` is always the live repo. The backend entrypoint refuses to start unless that bind mount exists, so keep running `git status` and landing commits from the host filesystem just like before.
+- Additional project repos live under `/workspaces/<project>`. Populate them from the host and the backend/Codex runner will see the same tree from inside containers.
+- Run `./scripts/nightshift_compose.sh smoke` after editing compose/Dockerfiles. It validates the YAML, builds both images, and runs the backend/frontend self-checks so regressions are caught before deployment.
+
 ## Git discipline (Roadmap §0.1)
 - Nightshift now enforces per-prompt branches: each run creates `nightshift/prompt-<prompt_id>-<slug>` from `dev`. Work only happens on that branch; the backend refuses to start if the tree is dirty before branch creation.
 - Never touch `main` and only merge into `dev` when a prompt (or operator) explicitly asks for it. The default workflow is: commit your work on the prompt branch, keep it ready for review, then wait for the merge instruction.

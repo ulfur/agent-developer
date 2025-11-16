@@ -18,6 +18,13 @@ TITLE_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 )
 
+SUBTITLE_FONT_CANDIDATES = (
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+)
+
 BODY_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
@@ -42,6 +49,10 @@ class StatusRenderer:
         self.width = width
         self.height = height
         self._title_font = self._load_font(size=84, candidates=TITLE_FONT_CANDIDATES)
+        subtitle_size = max(32, int(self._title_font.size * 0.45))
+        self._subtitle_font = self._load_font(size=subtitle_size, candidates=SUBTITLE_FONT_CANDIDATES)
+        self._subtitle_text = "all day every day"
+        self._subtitle_gap = max(8, self._subtitle_font.size // 4)
         self._body_font = self._load_font(size=46, candidates=BODY_FONT_CANDIDATES)
         logo_size = int(self._title_font.size * HEADER_ICON_BASE_SCALE * HEADER_ICON_ENLARGE_FACTOR)
         self._header_logos = self._load_header_logos(logo_size)
@@ -244,40 +255,57 @@ class StatusRenderer:
         human_notification_count: int | None,
     ) -> int:
         title = "Nightshift"
+        subtitle = (self._subtitle_text or "").strip()
         logo = self._select_header_logo(invert)
-        header_top = y
-        if logo:
-            canvas.paste(logo, (self._margin, y))
-            text_x = self._margin + logo.width + self._logo_text_gap
-            text_y = y + max(0, (logo.height - self._title_font.size) // 2)
-            header_height = max(self._title_font.size, logo.height)
-        else:
-            text_x = self._margin
-            text_y = y
-            header_height = self._title_font.size
+        subtitle_block = bool(subtitle)
+        subtitle_font = self._subtitle_font if subtitle_block else None
+        subtitle_height = subtitle_font.size if subtitle_font else 0
+        title_block_height = self._title_font.size + (self._subtitle_gap if subtitle_block else 0) + subtitle_height
+        stats_lines = self._format_header_stats_lines(pending_count, human_notification_count)
+        stats_font = self._body_font
+        stats_line_gap = max(6, stats_font.size // 3)
+        stats_block_height = 0
+        stats_width = 0
+        if stats_lines:
+            stats_block_height = (stats_font.size * len(stats_lines)) + (
+                stats_line_gap * (len(stats_lines) - 1) if len(stats_lines) > 1 else 0
+            )
+            stats_width = max(int(self._measure_text(line, font=stats_font)) for line in stats_lines)
+        logo_height = logo.height if logo else 0
+        header_height = max(title_block_height, logo_height, stats_block_height)
+        text_x = self._margin + (logo.width + self._logo_text_gap if logo else 0)
+        text_y = y + max(0, (header_height - title_block_height) // 2)
         draw.text((text_x, text_y), title, font=self._title_font, fill=0x00)
-        stats_label = self._format_header_stats_label(pending_count, human_notification_count)
-        if stats_label:
-            stats_font = self._body_font
-            stats_width = self._measure_text(stats_label, font=stats_font)
-            stats_x = max(self._margin, self.width - self._margin - int(stats_width))
-            stats_y = header_top + max(0, (header_height - stats_font.size) // 2)
-            draw.text((stats_x, stats_y), stats_label, font=stats_font, fill=0x00)
+        if subtitle_block and subtitle_font:
+            title_width = self._measure_text(title, font=self._title_font)
+            subtitle_width = self._measure_text(subtitle, font=subtitle_font)
+            aligned_subtitle_x = text_x + max(0, int(title_width - subtitle_width))
+            subtitle_y = text_y + self._title_font.size + self._subtitle_gap
+            draw.text((aligned_subtitle_x, subtitle_y), subtitle, font=subtitle_font, fill=0x00)
+        if logo:
+            logo_y = y + max(0, (header_height - logo.height) // 2)
+            canvas.paste(logo, (self._margin, logo_y))
+        if stats_lines:
+            stats_x = max(self._margin, self.width - self._margin - stats_width)
+            stats_y = y + max(0, (header_height - stats_block_height) // 2)
+            for idx, line in enumerate(stats_lines):
+                line_y = stats_y + idx * (stats_font.size + stats_line_gap)
+                draw.text((stats_x, line_y), line, font=stats_font, fill=0x00)
         return y + header_height + 30
 
-    def _format_header_stats_label(
+    def _format_header_stats_lines(
         self,
         pending_count: int | None,
         human_notification_count: int | None,
-    ) -> str:
-        parts: list[str] = []
+    ) -> list[str]:
         normalized_pending = self._normalize_count(pending_count)
         normalized_human = self._normalize_count(human_notification_count)
-        if normalized_pending is not None:
-            parts.append(f"Pending: {normalized_pending}")
-        if normalized_human and normalized_human > 0:
-            parts.append(f"Human alerts: {normalized_human}")
-        return "   ".join(parts)
+        agent_label = normalized_pending if normalized_pending is not None else "--"
+        human_label = normalized_human if normalized_human is not None else "--"
+        return [
+            f"Agent tasks: {agent_label}",
+            f"Human tasks: {human_label}",
+        ]
 
     def _normalize_count(self, value: int | None) -> int | None:
         if value is None:

@@ -79,6 +79,7 @@ class IT8591DisplayDriver:
         self._logger = logger or LOG
         self._lgpio = self._import_lgpio()
         self._gpio_handle = None
+        self._claimed_pins: set[int] = set()
         self._spi_handle = None
         self._lock = threading.Lock()
         self._dev_info: dict[str, int | str] | None = None
@@ -108,13 +109,22 @@ class IT8591DisplayDriver:
     def close(self) -> None:
         """Release GPIO/SPI handles to leave the bus in a clean state."""
         if self._spi_handle is not None:
-            self._lgpio.spi_close(self._spi_handle)
+            try:
+                self._lgpio.spi_close(self._spi_handle)
+            except Exception:  # pragma: no cover - defensive close
+                pass
             self._spi_handle = None
         if self._gpio_handle is not None:
-            self._lgpio.gpio_free(self._gpio_handle, self._config.busy_pin)
-            self._lgpio.gpio_free(self._gpio_handle, self._config.rst_pin)
-            self._lgpio.gpio_free(self._gpio_handle, self._config.cs_pin)
-            self._lgpio.gpiochip_close(self._gpio_handle)
+            for pin in list(self._claimed_pins):
+                try:
+                    self._lgpio.gpio_free(self._gpio_handle, pin)
+                except Exception:  # pragma: no cover - best-effort cleanup
+                    pass
+            self._claimed_pins.clear()
+            try:
+                self._lgpio.gpiochip_close(self._gpio_handle)
+            except Exception:  # pragma: no cover - defensive close
+                pass
             self._gpio_handle = None
 
     # ------------------------------------------------------------ init helpers
@@ -150,8 +160,11 @@ class IT8591DisplayDriver:
             raise DisplayUnavailable(f"Unable to open GPIO chip {chip}")
         self._gpio_handle = handle
         self._lgpio.gpio_claim_input(self._gpio_handle, self._config.busy_pin)
+        self._claimed_pins.add(self._config.busy_pin)
         self._lgpio.gpio_claim_output(self._gpio_handle, self._config.rst_pin, level=1)
+        self._claimed_pins.add(self._config.rst_pin)
         self._lgpio.gpio_claim_output(self._gpio_handle, self._config.cs_pin, level=1)
+        self._claimed_pins.add(self._config.cs_pin)
 
     def _setup_spi(self) -> None:
         handle = self._lgpio.spi_open(

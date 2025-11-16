@@ -4,5 +4,128 @@
   "description": "Core platform for the Codex-enabled development host and its backend/frontend codebase.",
   "contextFile": "context.md",
   "launchPath": null,
-  "default": true
+  "default": true,
+  "spec": {
+    "sources": [
+      {
+        "name": "Nightshift monorepo",
+        "url": "https://github.com/nightshift-dev/nightshift",
+        "defaultBranch": "dev",
+        "vcs": "git",
+        "path": "/workspaces/nightshift",
+        "description": "Primary repository containing the backend, frontend shell, docs, and registry metadata."
+      }
+    ],
+    "runtimes": [
+      {
+        "name": "Python",
+        "version": "3.11+",
+        "description": "Runs the backend server, CLI helpers, and most scripts."
+      },
+      {
+        "name": "Bash",
+        "version": "5.x",
+        "description": "Used by helper scripts (git discipline smoke test, compose wrapper)."
+      }
+    ],
+    "toolchains": [
+      {
+        "name": "Docker / Compose",
+        "version": "24+ / v2",
+        "description": "Builds and runs the backend/frontend containers for production parity."
+      },
+      {
+        "name": "Node.js",
+        "version": "18+",
+        "description": "Optional: building or linting the frontend when moving away from CDN bundles."
+      }
+    ],
+    "env": {
+      "variables": [
+        {
+          "name": "AGENT_HOST",
+          "description": "Bind interface for the backend HTTP server.",
+          "default": "0.0.0.0",
+          "required": false
+        },
+        {
+          "name": "AGENT_PORT",
+          "description": "Backend HTTP port used by the UI and CLI helpers.",
+          "default": "8080",
+          "required": false
+        },
+        {
+          "name": "DEFAULT_PROJECT_ID",
+          "description": "Project id automatically selected in the UI + CLI.",
+          "default": "nightshift",
+          "required": false
+        },
+        {
+          "name": "CODEX_CLI",
+          "description": "Path to the Codex CLI binary that CodexRunner shells out to.",
+          "default": "codex",
+          "required": true
+        },
+        {
+          "name": "CODEX_SANDBOX",
+          "description": "Optional Codex sandbox flag forwarded to the CLI.",
+          "default": null,
+          "required": false
+        },
+        {
+          "name": "CODEX_ENABLE_SEARCH",
+          "description": "Set to 0 to disable the Codex --search flag.",
+          "default": "1",
+          "required": false
+        },
+        {
+          "name": "ENABLE_EINK_DISPLAY",
+          "description": "Enable the IT8591 display worker when the hardware is attached.",
+          "default": "0",
+          "required": false
+        }
+      ],
+      "secrets": [
+        {
+          "name": "AGENT_PASSWORD",
+          "description": "UI/CLI administrator password supplied via ~/.config/systemd/user/nightshift.env on deploy hosts.",
+          "provider": "operators",
+          "location": "~/.config/systemd/user/nightshift.env",
+          "required": true
+        },
+        {
+          "name": "AGENT_TOKEN",
+          "description": "Optional long-lived API token for automation scripts (keep in the operator password store).",
+          "provider": "operators",
+          "location": "password store / vault",
+          "required": false
+        }
+      ]
+    },
+    "smokeTests": [
+      {
+        "name": "Branch discipline dry-run",
+        "command": "./scripts/git_branch_smoke.py",
+        "description": "Verifies prompt branches can be created/cleaned on the dev branch.",
+        "cadence": "Before queueing prompts or after git config changes.",
+        "timeoutSeconds": 120
+      },
+      {
+        "name": "Container smoke",
+        "command": "./scripts/nightshift_compose.sh smoke",
+        "description": "Builds backend/frontend images and runs the docker self-checks.",
+        "cadence": "Before deploying Docker/compose edits.",
+        "timeoutSeconds": 600
+      }
+    ],
+    "contacts": [
+      {
+        "name": "Ulfur K",
+        "role": "Operator",
+        "email": "ulfurk@ulfurk.com",
+        "slack": "#nightshift-ops",
+        "notes": "Primary maintainer and Codex operator for the Nightshift platform."
+      }
+    ]
+  }
 }

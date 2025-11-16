@@ -24,13 +24,13 @@ import threading
 import time
 import uuid
 from collections import Counter, deque
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from auth import AuthManager, AuthenticatedUser
 from eink.it8591 import IT8591Config, IT8951_ROTATE_180
@@ -39,10 +39,12 @@ try:  # optional git discipline helper (may not exist on deployments)
 except ModuleNotFoundError:  # pragma: no cover - optional feature
     GitBranchError = None
     PromptBranchDiscipline = None
+from environments import EnvironmentStore, build_environment_payload
 from human_tasks import HumanTaskStore, build_human_task_payload
 from log_utils import extract_stdout_preview
 from preferences import PreferenceStore
-from ssh_keys import SSHKeyManager, SSHKeyError
+from router_config import TraefikConfigManager
+from ssh_keys import SSHKeyError, SSHKeyManager
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -52,12 +54,18 @@ FRONTEND_DIR = REPO_ROOT / "frontend"
 PROJECTS_DIR = REPO_ROOT / "projects"
 PROMPT_DB_PATH = DATA_DIR / "prompts.json"
 HUMAN_TASK_DB_PATH = DATA_DIR / "human_tasks.json"
+ENVIRONMENT_DB_PATH = DATA_DIR / "environments.json"
 GENERAL_LOG_PATH = LOG_DIR / "progress.log"
 PREFERENCES_PATH = DATA_DIR / "preferences.json"
+ROUTER_STATE_DIR = DATA_DIR / "router"
+ROUTER_DYNAMIC_CONFIG = ROUTER_STATE_DIR / "environments.yml"
+ROUTER_CERTS_DIR = ROUTER_STATE_DIR / "certs"
 APP_CONTEXT: Dict[str, Any] = {}
 PROMPT_DURATION_WINDOW = 50
+PROMPT_STATUS_SERVER_RESTARTING = "server_restarting"
 TERMINAL_PROMPT_STATUSES: set[str] = {"completed", "failed", "canceled"}
-PROMPT_STATUSES: tuple[str, ...] = ("queued", "running", "completed", "failed", "canceled")
+TERMINAL_PROMPT_STATUS_ORDER: tuple[str, ...] = ("completed", "failed", "canceled")
+PROMPT_STATUSES: tuple[str, ...] = ("queued", "running", PROMPT_STATUS_SERVER_RESTARTING, "completed", "failed", "canceled")
 EDITABLE_PROMPT_STATUSES: set[str] = {"queued"} | TERMINAL_PROMPT_STATUSES
 CODEX_STATUS_CACHE_TTL_SECONDS = 120.0
 _CODEX_STATUS_CACHE: Dict[str, Any] = {"timestamp": 0.0, "payload": None}
@@ -212,7 +220,7 @@ def get_codex_status(force_refresh: bool = False) -> Dict[str, Any]:
 
 
 def ensure_dirs() -> None:
-    for path in (DATA_DIR, LOG_DIR, FRONTEND_DIR, PROJECTS_DIR):
+    for path in (DATA_DIR, LOG_DIR, FRONTEND_DIR, PROJECTS_DIR, ROUTER_STATE_DIR, ROUTER_CERTS_DIR):
         path.mkdir(parents=True, exist_ok=True)
 
 
@@ -258,6 +266,470 @@ class ProjectScope:
 
 
 @dataclass
+class ProjectSourceSpec:
+    name: str
+    url: str
+    default_branch: str
+    vcs: str = "git"
+    path: Optional[str] = None
+    description: str = ""
+
+
+@dataclass
+class ProjectRuntimeRequirement:
+    name: str
+    version: str
+    description: str = ""
+
+
+@dataclass
+class ProjectToolchainRequirement:
+    name: str
+    version: str
+    description: str = ""
+
+
+@dataclass
+class ProjectEnvVarSpec:
+    name: str
+    description: str
+    required: bool = False
+    default: Optional[str] = None
+    example: Optional[str] = None
+
+
+@dataclass
+class ProjectSecretSpec:
+    name: str
+    description: str
+    provider: Optional[str] = None
+    location: Optional[str] = None
+    required: bool = True
+
+
+@dataclass
+class ProjectEnvSpec:
+    variables: list[ProjectEnvVarSpec] = field(default_factory=list)
+    secrets: list[ProjectSecretSpec] = field(default_factory=list)
+
+
+@dataclass
+class ProjectSmokeTest:
+    name: str
+    command: str
+    description: str = ""
+    cadence: str = ""
+    timeout_seconds: Optional[int] = None
+
+
+@dataclass
+class ProjectContact:
+    name: str
+    role: str
+    email: Optional[str] = None
+    slack: Optional[str] = None
+    phone: Optional[str] = None
+    notes: str = ""
+
+
+@dataclass
+class ProjectSpec:
+    sources: list[ProjectSourceSpec] = field(default_factory=list)
+    runtimes: list[ProjectRuntimeRequirement] = field(default_factory=list)
+    toolchains: list[ProjectToolchainRequirement] = field(default_factory=list)
+    env: ProjectEnvSpec = field(default_factory=ProjectEnvSpec)
+    smoke_tests: list[ProjectSmokeTest] = field(default_factory=list)
+    contacts: list[ProjectContact] = field(default_factory=list)
+
+    def to_payload(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+class ProjectSpecValidationError(ValueError):
+    """Raised when a project specification cannot be parsed."""
+
+
+def _pick_value(entry: Dict[str, Any], keys: Iterable[str]) -> Any:
+    for key in keys:
+        if key in entry:
+            return entry[key]
+    return None
+
+
+def _coerce_text(
+    value: Any,
+    field_label: str,
+    project_id: str,
+    *,
+    required: bool = False,
+    default: Optional[str] = None,
+    allow_empty: bool = False,
+) -> Optional[str]:
+    if value is None:
+        if required and default is None:
+            raise ProjectSpecValidationError(f"{field_label} is required for project '{project_id}'.")
+        return default
+    if not isinstance(value, str):
+        raise ProjectSpecValidationError(f"{field_label} must be a string for project '{project_id}'.")
+    trimmed = value.strip()
+    if not trimmed:
+        if allow_empty:
+            return ""
+        if required and default is None:
+            raise ProjectSpecValidationError(f"{field_label} cannot be empty for project '{project_id}'.")
+        return default
+    return trimmed
+
+
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def _coerce_positive_int(value: Any, field_label: str, project_id: str) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ProjectSpecValidationError(f"{field_label} must be an integer for project '{project_id}'.")
+    if isinstance(value, (int, float)):
+        integer = int(value)
+        if integer < 0:
+            raise ProjectSpecValidationError(f"{field_label} cannot be negative for project '{project_id}'.")
+        return integer
+    if isinstance(value, str) and value.strip():
+        try:
+            integer = int(value.strip())
+        except ValueError as exc:
+            raise ProjectSpecValidationError(
+                f"{field_label} must be an integer for project '{project_id}'."
+            ) from exc
+        if integer < 0:
+            raise ProjectSpecValidationError(f"{field_label} cannot be negative for project '{project_id}'.")
+        return integer
+    raise ProjectSpecValidationError(f"{field_label} must be an integer for project '{project_id}'.")
+
+
+def _require_record_list(
+    value: Any,
+    field_label: str,
+    project_id: str,
+    *,
+    allow_empty: bool = False,
+) -> list[Dict[str, Any]]:
+    if value is None:
+        if allow_empty:
+            return []
+        raise ProjectSpecValidationError(f"{field_label} is required for project '{project_id}'.")
+    if not isinstance(value, list):
+        raise ProjectSpecValidationError(f"{field_label} must be a list for project '{project_id}'.")
+    if not value and not allow_empty:
+        raise ProjectSpecValidationError(f"{field_label} cannot be empty for project '{project_id}'.")
+    records: list[Dict[str, Any]] = []
+    for idx, entry in enumerate(value):
+        if not isinstance(entry, dict):
+            raise ProjectSpecValidationError(
+                f"{field_label}[{idx}] must be an object for project '{project_id}'."
+            )
+        records.append(entry)
+    return records
+
+
+def _parse_spec_sources(spec: Dict[str, Any], project_id: str) -> list[ProjectSourceSpec]:
+    entries = _require_record_list(spec.get("sources"), "spec.sources", project_id)
+    parsed: list[ProjectSourceSpec] = []
+    for idx, entry in enumerate(entries):
+        name = _coerce_text(
+            _pick_value(entry, ("name", "label")),
+            f"spec.sources[{idx}].name",
+            project_id,
+            required=True,
+        )
+        url = _coerce_text(entry.get("url"), f"spec.sources[{idx}].url", project_id, required=True)
+        default_branch = _coerce_text(
+            _pick_value(entry, ("defaultBranch", "default_branch")),
+            f"spec.sources[{idx}].default_branch",
+            project_id,
+            default="main",
+        ) or "main"
+        vcs = _coerce_text(entry.get("vcs"), f"spec.sources[{idx}].vcs", project_id, default="git") or "git"
+        path = _coerce_text(
+            _pick_value(entry, ("path", "workspacePath", "checkoutPath")),
+            f"spec.sources[{idx}].path",
+            project_id,
+            default=None,
+        )
+        description = _coerce_text(
+            _pick_value(entry, ("description", "notes")),
+            f"spec.sources[{idx}].description",
+            project_id,
+            default="",
+            allow_empty=True,
+        ) or ""
+        parsed.append(
+            ProjectSourceSpec(
+                name=name or "",
+                url=url or "",
+                default_branch=default_branch,
+                vcs=vcs,
+                path=path,
+                description=description,
+            )
+        )
+    return parsed
+
+
+def _parse_spec_runtimes(spec: Dict[str, Any], project_id: str) -> list[ProjectRuntimeRequirement]:
+    entries = _require_record_list(spec.get("runtimes"), "spec.runtimes", project_id)
+    parsed: list[ProjectRuntimeRequirement] = []
+    for idx, entry in enumerate(entries):
+        name = _coerce_text(entry.get("name"), f"spec.runtimes[{idx}].name", project_id, required=True)
+        version = _coerce_text(entry.get("version"), f"spec.runtimes[{idx}].version", project_id, required=True)
+        description = _coerce_text(
+            _pick_value(entry, ("description", "notes")),
+            f"spec.runtimes[{idx}].description",
+            project_id,
+            default="",
+            allow_empty=True,
+        ) or ""
+        parsed.append(ProjectRuntimeRequirement(name=name or "", version=version or "", description=description))
+    return parsed
+
+
+def _parse_spec_toolchains(spec: Dict[str, Any], project_id: str) -> list[ProjectToolchainRequirement]:
+    entries = _require_record_list(spec.get("toolchains"), "spec.toolchains", project_id, allow_empty=True)
+    parsed: list[ProjectToolchainRequirement] = []
+    if not entries:
+        return parsed
+    for idx, entry in enumerate(entries):
+        name = _coerce_text(entry.get("name"), f"spec.toolchains[{idx}].name", project_id, required=True)
+        version = _coerce_text(entry.get("version"), f"spec.toolchains[{idx}].version", project_id, required=True)
+        description = _coerce_text(
+            _pick_value(entry, ("description", "notes")),
+            f"spec.toolchains[{idx}].description",
+            project_id,
+            default="",
+            allow_empty=True,
+        ) or ""
+        parsed.append(ProjectToolchainRequirement(name=name or "", version=version or "", description=description))
+    return parsed
+
+
+def _parse_env_variables(entries: list[Dict[str, Any]], project_id: str) -> list[ProjectEnvVarSpec]:
+    parsed: list[ProjectEnvVarSpec] = []
+    for idx, entry in enumerate(entries):
+        name = _coerce_text(
+            _pick_value(entry, ("name", "variable")),
+            f"spec.env.variables[{idx}].name",
+            project_id,
+            required=True,
+        )
+        description = _coerce_text(
+            _pick_value(entry, ("description", "notes")),
+            f"spec.env.variables[{idx}].description",
+            project_id,
+            default="",
+            allow_empty=True,
+        ) or ""
+        default_value = _coerce_text(
+            entry.get("default"),
+            f"spec.env.variables[{idx}].default",
+            project_id,
+            default=None,
+            allow_empty=True,
+        )
+        example = _coerce_text(
+            entry.get("example"),
+            f"spec.env.variables[{idx}].example",
+            project_id,
+            default=None,
+            allow_empty=True,
+        )
+        required_flag = _coerce_bool(entry.get("required", False))
+        parsed.append(
+            ProjectEnvVarSpec(
+                name=name or "",
+                description=description,
+                required=required_flag,
+                default=default_value,
+                example=example,
+            )
+        )
+    return parsed
+
+
+def _parse_env_secrets(entries: list[Dict[str, Any]], project_id: str) -> list[ProjectSecretSpec]:
+    parsed: list[ProjectSecretSpec] = []
+    for idx, entry in enumerate(entries):
+        name = _coerce_text(
+            _pick_value(entry, ("name", "secret")),
+            f"spec.env.secrets[{idx}].name",
+            project_id,
+            required=True,
+        )
+        description = _coerce_text(
+            _pick_value(entry, ("description", "notes")),
+            f"spec.env.secrets[{idx}].description",
+            project_id,
+            default="",
+            allow_empty=True,
+        ) or ""
+        provider = _coerce_text(
+            _pick_value(entry, ("provider", "source")),
+            f"spec.env.secrets[{idx}].provider",
+            project_id,
+            default=None,
+            allow_empty=True,
+        )
+        location = _coerce_text(
+            _pick_value(entry, ("location", "store")),
+            f"spec.env.secrets[{idx}].location",
+            project_id,
+            default=None,
+            allow_empty=True,
+        )
+        required_flag = _coerce_bool(entry.get("required", True))
+        parsed.append(
+            ProjectSecretSpec(
+                name=name or "",
+                description=description,
+                provider=provider,
+                location=location,
+                required=required_flag,
+            )
+        )
+    return parsed
+
+
+def _parse_spec_env(spec: Dict[str, Any], project_id: str) -> ProjectEnvSpec:
+    raw_env = spec.get("env") or spec.get("environment")
+    if raw_env is None:
+        return ProjectEnvSpec()
+    if not isinstance(raw_env, dict):
+        raise ProjectSpecValidationError(f"spec.env must be an object for project '{project_id}'.")
+    variables_raw = _require_record_list(
+        raw_env.get("variables"),
+        "spec.env.variables",
+        project_id,
+        allow_empty=True,
+    )
+    secrets_raw = _require_record_list(
+        raw_env.get("secrets"),
+        "spec.env.secrets",
+        project_id,
+        allow_empty=True,
+    )
+    return ProjectEnvSpec(
+        variables=_parse_env_variables(variables_raw, project_id),
+        secrets=_parse_env_secrets(secrets_raw, project_id),
+    )
+
+
+def _parse_spec_smoke_tests(spec: Dict[str, Any], project_id: str) -> list[ProjectSmokeTest]:
+    entries = _require_record_list(spec.get("smokeTests") or spec.get("smoke_tests"), "spec.smokeTests", project_id)
+    parsed: list[ProjectSmokeTest] = []
+    for idx, entry in enumerate(entries):
+        name = _coerce_text(entry.get("name"), f"spec.smokeTests[{idx}].name", project_id, required=True)
+        command = _coerce_text(entry.get("command"), f"spec.smokeTests[{idx}].command", project_id, required=True)
+        description = _coerce_text(
+            _pick_value(entry, ("description", "notes")),
+            f"spec.smokeTests[{idx}].description",
+            project_id,
+            default="",
+            allow_empty=True,
+        ) or ""
+        cadence = _coerce_text(
+            entry.get("cadence"),
+            f"spec.smokeTests[{idx}].cadence",
+            project_id,
+            default="",
+            allow_empty=True,
+        ) or ""
+        timeout_seconds = _coerce_positive_int(
+            _pick_value(entry, ("timeoutSeconds", "timeout_seconds", "timeout")),
+            f"spec.smokeTests[{idx}].timeout_seconds",
+            project_id,
+        )
+        parsed.append(
+            ProjectSmokeTest(
+                name=name or "",
+                command=command or "",
+                description=description,
+                cadence=cadence,
+                timeout_seconds=timeout_seconds,
+            )
+        )
+    return parsed
+
+
+def _parse_spec_contacts(spec: Dict[str, Any], project_id: str) -> list[ProjectContact]:
+    entries = _require_record_list(spec.get("contacts"), "spec.contacts", project_id)
+    parsed: list[ProjectContact] = []
+    for idx, entry in enumerate(entries):
+        name = _coerce_text(entry.get("name"), f"spec.contacts[{idx}].name", project_id, required=True)
+        role = _coerce_text(entry.get("role"), f"spec.contacts[{idx}].role", project_id, required=True)
+        email = _coerce_text(
+            entry.get("email"),
+            f"spec.contacts[{idx}].email",
+            project_id,
+            default=None,
+            allow_empty=True,
+        )
+        slack = _coerce_text(
+            entry.get("slack"),
+            f"spec.contacts[{idx}].slack",
+            project_id,
+            default=None,
+            allow_empty=True,
+        )
+        phone = _coerce_text(
+            entry.get("phone"),
+            f"spec.contacts[{idx}].phone",
+            project_id,
+            default=None,
+            allow_empty=True,
+        )
+        notes = _coerce_text(
+            _pick_value(entry, ("notes", "description")),
+            f"spec.contacts[{idx}].notes",
+            project_id,
+            default="",
+            allow_empty=True,
+        ) or ""
+        parsed.append(
+            ProjectContact(
+                name=name or "",
+                role=role or "",
+                email=email,
+                slack=slack,
+                phone=phone,
+                notes=notes,
+            )
+        )
+    return parsed
+
+
+def _parse_project_spec(metadata: Dict[str, Any], project_id: str) -> ProjectSpec:
+    raw_spec = metadata.get("spec") or metadata.get("specification")
+    if raw_spec is None:
+        raise ProjectSpecValidationError(f"project.json for '{project_id}' must define a 'spec' block.")
+    if not isinstance(raw_spec, dict):
+        raise ProjectSpecValidationError(f"'spec' must be an object for project '{project_id}'.")
+    return ProjectSpec(
+        sources=_parse_spec_sources(raw_spec, project_id),
+        runtimes=_parse_spec_runtimes(raw_spec, project_id),
+        toolchains=_parse_spec_toolchains(raw_spec, project_id),
+        env=_parse_spec_env(raw_spec, project_id),
+        smoke_tests=_parse_spec_smoke_tests(raw_spec, project_id),
+        contacts=_parse_spec_contacts(raw_spec, project_id),
+    )
+
+
+@dataclass
 class ProjectDefinition:
     project_id: str
     name: str
@@ -268,6 +740,7 @@ class ProjectDefinition:
     is_default: bool = False
     scope: ProjectScope | None = None
     root_dir: Path | None = None
+    spec: ProjectSpec | None = None
 
     def read_context(self) -> str:
         if not self.context_file:
@@ -291,6 +764,7 @@ class ProjectDefinition:
             "name": self.name,
             "description": self.description,
             "launch_url": self.launch_path,
+            "spec": self.spec.to_payload() if self.spec else None,
         }
 
 
@@ -456,6 +930,12 @@ class ProjectRegistry:
             launch_path = metadata.get("launchPath") or metadata.get("launch_path") or metadata.get("launchUrl")
             is_default = bool(metadata.get("default"))
             scope = self._load_scope(directory, project_id)
+            try:
+                spec = _parse_project_spec(metadata, project_id)
+            except ProjectSpecValidationError as exc:
+                if self._logger:
+                    self._logger.error("Skipping project %s: %s", project_id, exc)
+                continue
             project = ProjectDefinition(
                 project_id=project_id,
                 name=name or project_id,
@@ -466,6 +946,7 @@ class ProjectRegistry:
                 is_default=is_default,
                 scope=scope,
                 root_dir=directory,
+                spec=spec,
             )
             self._projects[project_id] = project
             if is_default:
@@ -761,6 +1242,8 @@ class PromptRecord:
     last_run_seconds: Optional[float] = None
     last_finished_at: Optional[str] = None
     human_task_id: Optional[str] = None
+    server_restart_required: bool = False
+    server_restart_marked_at: Optional[str] = None
 
 
 class PromptStore:
@@ -814,6 +1297,8 @@ class PromptStore:
                 payload.setdefault("current_wait_seconds", None)
                 payload.setdefault("last_wait_seconds", None)
                 payload.setdefault("last_run_seconds", None)
+                payload.setdefault("server_restart_required", False)
+                payload.setdefault("server_restart_marked_at", None)
                 if status in TERMINAL_PROMPT_STATUSES:
                     payload["last_finished_at"] = payload.get("last_finished_at") or payload.get("updated_at")
                 else:
@@ -965,32 +1450,138 @@ class PromptStore:
 
     def list_prompts(self) -> Dict[str, Any]:
         with self._lock:
-            ordered = list(sorted(self._records.values(), key=lambda r: r.created_at, reverse=True))
+            records = list(self._records.values())
 
-        items: list[dict[str, Any]] = []
         registry = self.project_registry or APP_CONTEXT.get("projects")
-        for rec in ordered:
-            payload = asdict(rec)
+
+        def build_queue_payload(record: PromptRecord) -> Dict[str, Any]:
+            payload = asdict(record)
             if registry:
-                project = registry.get(rec.project_id)
+                project = registry.get(record.project_id)
                 if project:
                     payload["project"] = project.to_payload()
-            if rec.status == "completed":
-                payload["stdout_preview"] = extract_stdout_preview(rec.log_path)
+            if record.status == "completed":
+                payload["stdout_preview"] = extract_stdout_preview(record.log_path)
             else:
                 payload["stdout_preview"] = ""
-            human_task_payload = _build_prompt_human_task_context(rec, registry)
+            human_task_payload = _build_prompt_human_task_context(record, registry)
             if human_task_payload:
                 payload["human_task"] = human_task_payload
-            items.append(payload)
-        return {"items": items}
+            payload["queue_position"] = None
+            return payload
+
+        buckets: Dict[str, list[tuple[PromptRecord, Dict[str, Any]]]] = {
+            status: [] for status in PROMPT_STATUSES
+        }
+        other_status_records: list[tuple[PromptRecord, Dict[str, Any]]] = []
+        for record in records:
+            payload = build_queue_payload(record)
+            bucket = buckets.get(record.status)
+            if bucket is None:
+                other_status_records.append((record, payload))
+            else:
+                bucket.append((record, payload))
+
+        def _timestamp_key(*values: Optional[str]) -> str:
+            for value in values:
+                if value:
+                    return value
+            return ""
+
+        queued_records = list(buckets.get("queued", []))
+        queued_records.sort(
+            key=lambda item: (
+                _timestamp_key(item[0].enqueued_at, item[0].created_at, item[0].updated_at),
+                item[0].prompt_id,
+            )
+        )
+
+        running_records = list(buckets.get("running", [])) + list(
+            buckets.get(PROMPT_STATUS_SERVER_RESTARTING, [])
+        )
+
+        def _running_sort_key(record: PromptRecord) -> str:
+            if record.status == PROMPT_STATUS_SERVER_RESTARTING:
+                return _timestamp_key(
+                    record.server_restart_marked_at,
+                    record.updated_at,
+                    record.started_at,
+                    record.enqueued_at,
+                )
+            return _timestamp_key(record.started_at, record.updated_at, record.enqueued_at, record.created_at)
+
+        running_records.sort(
+            key=lambda item: (
+                _running_sort_key(item[0]),
+                item[0].prompt_id,
+            )
+        )
+
+        terminal_record_pairs: list[tuple[PromptRecord, Dict[str, Any]]] = []
+        for status in TERMINAL_PROMPT_STATUS_ORDER:
+            terminal_record_pairs.extend(buckets.get(status, []))
+        terminal_record_pairs.sort(
+            key=lambda item: (
+                _timestamp_key(item[0].updated_at, item[0].last_finished_at, item[0].created_at),
+                item[0].prompt_id,
+            ),
+            reverse=True,
+        )
+
+        other_status_records.sort(
+            key=lambda item: (
+                _timestamp_key(item[0].updated_at, item[0].created_at),
+                item[0].prompt_id,
+            ),
+            reverse=True,
+        )
+
+        ordered_payloads: list[Dict[str, Any]] = []
+        position_counter = 0
+        for collection in (queued_records, running_records):
+            for record, payload in collection:
+                position_counter += 1
+                payload["queue_position"] = position_counter
+                ordered_payloads.append(payload)
+
+        for collection in (terminal_record_pairs, other_status_records):
+            for _, payload in collection:
+                ordered_payloads.append(payload)
+
+        status_buckets: Dict[str, Dict[str, Any]] = {
+            status: {"count": 0, "prompt_ids": []} for status in PROMPT_STATUSES
+        }
+        for payload in ordered_payloads:
+            status = payload.get("status")
+            if not status:
+                continue
+            bucket = status_buckets.setdefault(status, {"count": 0, "prompt_ids": []})
+            bucket["count"] += 1
+            prompt_id = payload.get("prompt_id")
+            if prompt_id:
+                bucket["prompt_ids"].append(prompt_id)
+
+        return {"items": ordered_payloads, "status_buckets": status_buckets}
 
     def get_prompt(self, prompt_id: str) -> Optional[PromptRecord]:
         with self._lock:
             return self._records.get(prompt_id)
 
+    def prompts_for_human_task(self, task_id: str) -> list[PromptRecord]:
+        if not task_id:
+            return []
+        with self._lock:
+            return [record for record in self._records.values() if record.human_task_id == task_id]
+
     def pending_count(self) -> int:
         return self._pending.qsize()
+
+    def prompts_with_status(self, status: str) -> list[PromptRecord]:
+        normalized = str(status or "").strip().lower()
+        if normalized not in PROMPT_STATUSES:
+            raise ValueError(f"invalid prompt status: {status}")
+        with self._lock:
+            return [record for record in self._records.values() if record.status == normalized]
 
     def status_counts(self) -> Dict[str, int]:
         with self._lock:
@@ -1094,6 +1685,31 @@ class PromptStore:
 
     def mark_canceled(self, prompt_id: str, summary: str) -> None:
         self._update(prompt_id, status="canceled", result_summary=summary)
+
+    def mark_server_restarting(
+        self,
+        prompt_id: str,
+        *,
+        requires_follow_up: bool = False,
+        summary: Optional[str] = None,
+    ) -> PromptRecord:
+        message = (summary or "").strip() or "Server restart in progress; awaiting verification after reboot."
+        with self._lock:
+            record = self._records.get(prompt_id)
+            if record is None:
+                raise KeyError(prompt_id)
+            if record.status != "running":
+                raise ValueError("prompt must be running before marking it as server_restarting")
+            now = utcnow_iso()
+            self._change_status(record, PROMPT_STATUS_SERVER_RESTARTING)
+            record.server_restart_required = bool(requires_follow_up)
+            record.server_restart_marked_at = now
+            record.result_summary = message
+            record.started_at = None
+            record.current_wait_seconds = None
+            record.updated_at = now
+        self._persist()
+        return record
 
     def retry_prompt(self, prompt_id: str) -> PromptRecord:
         with self._lock:
@@ -1918,12 +2534,14 @@ class EventStreamer:
         ws_manager: WebSocketManager,
         project_registry: Optional[ProjectRegistry] = None,
         human_tasks: Optional[HumanTaskStore] = None,
+        environments: Optional[EnvironmentStore] = None,
     ):
         self.store = store
         self.logger = logger
         self.ws_manager = ws_manager
         self.project_registry = project_registry
         self.human_tasks = human_tasks
+        self.environments = environments
 
     def broadcast_queue(self, targets: Optional[Iterable[WebSocketConnection]] = None) -> None:
         snapshot = self.store.list_prompts()
@@ -1951,6 +2569,7 @@ class EventStreamer:
     def broadcast_health(self, targets: Optional[Iterable[WebSocketConnection]] = None) -> None:
         prompt_metrics = self.store.health_snapshot()
         task_metrics = self.human_tasks.health_snapshot() if self.human_tasks else {}
+        environment_metrics = self.environments.health_snapshot() if self.environments else {}
         payload = {
             "status": "ok",
             "timestamp": utcnow_iso(),
@@ -1958,6 +2577,7 @@ class EventStreamer:
             "metrics": {
                 **prompt_metrics,
                 "human_tasks": task_metrics,
+                "environments": environment_metrics,
             },
             "codex_status": get_codex_status(),
         }
@@ -2049,7 +2669,10 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
 
     # API helpers -----------------------------------------------------
     def _handle_api_get(self) -> None:
-        if self.path == "/api/projects":
+        parsed = urlsplit(self.path)
+        clean_path = parsed.path.rstrip("/") or "/"
+        query_params = parse_qs(parsed.query)
+        if clean_path == "/api/projects":
             registry: Optional[ProjectRegistry] = APP_CONTEXT.get("projects")
             if registry:
                 payload = registry.to_payload()
@@ -2059,37 +2682,39 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             return
         if not self._require_auth():
             return
-        if self.path == "/api/health":
+        if clean_path == "/api/health":
             store: PromptStore = APP_CONTEXT["store"]
             metrics = store.health_snapshot()
             human_store: Optional[HumanTaskStore] = APP_CONTEXT.get("human_tasks")
             human_metrics = human_store.health_snapshot() if human_store else {}
+            environment_store: Optional[EnvironmentStore] = APP_CONTEXT.get("environments")
+            environment_metrics = environment_store.health_snapshot() if environment_store else {}
             payload = {
                 "status": "ok",
                 "timestamp": utcnow_iso(),
                 "pending": metrics.get("status_counts", {}).get("queued", 0),
-                "metrics": {**metrics, "human_tasks": human_metrics},
+                "metrics": {**metrics, "human_tasks": human_metrics, "environments": environment_metrics},
                 "user": APP_CONTEXT["auth"].user_payload(self.current_user) if self.current_user else None,
                 "codex_status": get_codex_status(),
             }
             self._write_json(payload)
-        elif self.path == "/api/prompts":
+        elif clean_path == "/api/prompts":
             payload = APP_CONTEXT["store"].list_prompts()
             self._write_json(payload)
-        elif self.path.startswith("/api/prompts/"):
-            prompt_id = self.path.rsplit("/", 1)[-1]
+        elif clean_path.startswith("/api/prompts/"):
+            prompt_id = clean_path.rsplit("/", 1)[-1]
             record = APP_CONTEXT["store"].get_prompt(prompt_id)
             if not record:
                 self._write_json({"error": "prompt not found"}, status=404)
             else:
                 registry: Optional[ProjectRegistry] = APP_CONTEXT.get("projects")
                 self._write_json(build_prompt_payload(record, registry))
-        elif self.path == "/api/human_tasks":
+        elif clean_path == "/api/human_tasks":
             store: HumanTaskStore = APP_CONTEXT["human_tasks"]
             registry = APP_CONTEXT.get("projects")
             self._write_json(store.to_collection_payload(registry))
-        elif self.path.startswith("/api/human_tasks/"):
-            task_id = self.path.rsplit("/", 1)[-1]
+        elif clean_path.startswith("/api/human_tasks/"):
+            task_id = clean_path.rsplit("/", 1)[-1]
             store = APP_CONTEXT["human_tasks"]
             record = store.get_task(task_id)
             if not record:
@@ -2097,13 +2722,30 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             else:
                 registry = APP_CONTEXT.get("projects")
                 self._write_json({"task": build_human_task_payload(record, registry)})
-        elif self.path == "/api/logs":
+        elif clean_path == "/api/environments":
+            store: EnvironmentStore = APP_CONTEXT["environments"]
+            registry = APP_CONTEXT.get("projects")
+            project_filter = query_params.get("project_id") or query_params.get("project")
+            project_value = project_filter[0].strip() if project_filter else None
+            if project_value == "":
+                project_value = None
+            self._write_json(store.to_collection_payload(registry, project_id=project_value))
+        elif clean_path.startswith("/api/environments/"):
+            env_id = clean_path.rsplit("/", 1)[-1]
+            store = APP_CONTEXT["environments"]
+            record = store.get_environment(env_id)
+            if not record:
+                self._write_json({"error": "environment not found"}, status=404)
+            else:
+                registry = APP_CONTEXT.get("projects")
+                self._write_json({"environment": build_environment_payload(record, registry)})
+        elif clean_path == "/api/logs":
             if GENERAL_LOG_PATH.exists():
                 content = GENERAL_LOG_PATH.read_text(encoding="utf-8")
             else:
                 content = ""
             self._write_json({"log": content})
-        elif self.path == "/api/user/ssh_keys":
+        elif clean_path == "/api/user/ssh_keys":
             manager: Optional[SSHKeyManager] = APP_CONTEXT.get("ssh_keys")
             if not manager:
                 self._write_json({"keys": []})
@@ -2127,12 +2769,14 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
         connection.serve()
 
     def _handle_api_post(self) -> None:
-        if self.path == "/api/login":
+        parsed = urlsplit(self.path)
+        clean_path = parsed.path.rstrip("/") or "/"
+        if clean_path == "/api/login":
             self._handle_login()
             return
         if not self._require_auth():
             return
-        if self.path == "/api/prompts":
+        if clean_path == "/api/prompts":
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
             try:
@@ -2165,7 +2809,7 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 events.broadcast_prompt(record.prompt_id)
                 events.broadcast_health()
             self._write_json({"prompt_id": record.prompt_id, "status": record.status}, status=201)
-        elif self.path == "/api/human_tasks":
+        elif clean_path == "/api/human_tasks":
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
             try:
@@ -2199,8 +2843,76 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             if events:
                 events.broadcast_health()
             self._write_json({"task": build_human_task_payload(record, registry)}, status=201)
-        elif self.path.startswith("/api/prompts/") and self.path.endswith("/retry"):
-            parts = self.path.rstrip("/").split("/")
+        elif clean_path == "/api/environments":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body or b"{}")
+            except json.JSONDecodeError:
+                self._write_json({"error": "invalid json"}, status=400)
+                return
+            store: EnvironmentStore = APP_CONTEXT["environments"]
+            try:
+                record = store.create_environment(payload)
+            except ValueError as exc:
+                self._write_json({"error": str(exc)}, status=400)
+                return
+            registry = APP_CONTEXT.get("projects")
+            APP_CONTEXT["audit_logger"].info("Registered environment %s", record.environment_id)
+            events = APP_CONTEXT.get("events")
+            if events:
+                events.broadcast_health()
+            self._write_json({"environment": build_environment_payload(record, registry)}, status=201)
+        elif clean_path.startswith("/api/prompts/") and clean_path.endswith("/server_restarting"):
+            parts = clean_path.split("/")
+            if len(parts) < 4:
+                self._write_json({"error": "invalid server_restarting path"}, status=400)
+                return
+            prompt_id = parts[-2]
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body or b"{}")
+            except json.JSONDecodeError:
+                self._write_json({"error": "invalid json"}, status=400)
+                return
+            requires_follow_up = bool(
+                payload.get("requires_follow_up")
+                or payload.get("needs_follow_up")
+                or payload.get("needs_restart")
+            )
+            summary = payload.get("summary")
+            store: PromptStore = APP_CONTEXT["store"]
+            try:
+                record = store.mark_server_restarting(
+                    prompt_id,
+                    requires_follow_up=requires_follow_up,
+                    summary=summary,
+                )
+            except KeyError:
+                self._write_json({"error": "prompt not found"}, status=404)
+                return
+            except ValueError as exc:
+                self._write_json({"error": str(exc)}, status=400)
+                return
+            APP_CONTEXT["audit_logger"].info(
+                "Marked prompt %s as server_restarting (follow_up=%s)", prompt_id, requires_follow_up
+            )
+            events = APP_CONTEXT.get("events")
+            if events:
+                events.broadcast_queue()
+                events.broadcast_prompt(prompt_id)
+                events.broadcast_health()
+            self._write_json(
+                {
+                    "prompt_id": record.prompt_id,
+                    "status": record.status,
+                    "requires_follow_up": record.server_restart_required,
+                },
+                status=202,
+            )
+        elif clean_path.startswith("/api/prompts/") and clean_path.endswith("/retry"):
+            parts = clean_path.split("/")
             if len(parts) < 4:
                 self._write_json({"error": "invalid retry path"}, status=400)
                 return
@@ -2219,8 +2931,8 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 self._write_json({"error": "prompt not found"}, status=404)
             except ValueError as exc:
                 self._write_json({"error": str(exc)}, status=400)
-        elif self.path.startswith("/api/prompts/") and self.path.endswith("/cancel"):
-            parts = self.path.rstrip("/").split("/")
+        elif clean_path.startswith("/api/prompts/") and clean_path.endswith("/cancel"):
+            parts = clean_path.split("/")
             if len(parts) < 4:
                 self._write_json({"error": "invalid cancel path"}, status=400)
                 return
@@ -2255,7 +2967,7 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 {"prompt_id": prompt_id, "status": "canceling", "restart": restart_requested},
                 status=202,
             )
-        elif self.path == "/api/user/password":
+        elif clean_path == "/api/user/password":
             self._handle_password_change()
         else:
             self._write_json({"error": "unknown endpoint"}, status=404)
@@ -2305,6 +3017,31 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             if events:
                 events.broadcast_health()
             self._write_json({"task": build_human_task_payload(record, registry)})
+            return
+        if clean_path.startswith("/api/environments/"):
+            env_id = clean_path.rsplit("/", 1)[-1]
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body or b"{}")
+            except json.JSONDecodeError:
+                self._write_json({"error": "invalid json"}, status=400)
+                return
+            store: EnvironmentStore = APP_CONTEXT["environments"]
+            try:
+                record = store.update_environment(env_id, payload)
+            except KeyError:
+                self._write_json({"error": "environment not found"}, status=404)
+                return
+            except ValueError as exc:
+                self._write_json({"error": str(exc)}, status=400)
+                return
+            registry = APP_CONTEXT.get("projects")
+            APP_CONTEXT["audit_logger"].info("Updated environment %s", env_id)
+            events = APP_CONTEXT.get("events")
+            if events:
+                events.broadcast_health()
+            self._write_json({"environment": build_environment_payload(record, registry)})
             return
         if not clean_path.startswith("/api/prompts/"):
             self._write_json({"error": "unknown endpoint"}, status=404)
@@ -2482,6 +3219,21 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 events.broadcast_health()
             schedule_display_refresh("human-task-delete")
             self._write_json({"task_id": task_id, "deleted": True})
+        elif clean_path.startswith("/api/environments/"):
+            env_id = clean_path.rstrip("/").rsplit("/", 1)[-1]
+            if not env_id:
+                self._write_json({"error": "environment_id required"}, status=400)
+                return
+            store: EnvironmentStore = APP_CONTEXT["environments"]
+            deleted = store.delete_environment(env_id)
+            if not deleted:
+                self._write_json({"error": "environment not found"}, status=404)
+                return
+            APP_CONTEXT["audit_logger"].info("Deleted environment %s", env_id)
+            events = APP_CONTEXT.get("events")
+            if events:
+                events.broadcast_health()
+            self._write_json({"environment_id": env_id, "deleted": True})
         else:
             self._write_json({"error": "unknown endpoint"}, status=404)
 
@@ -2617,6 +3369,29 @@ def start_display_manager(
     return manager
 
 
+def reconcile_server_restart_prompts(store: PromptStore, logger: logging.Logger) -> list[str]:
+    """After a reboot, resolve prompts that intentionally restarted the backend."""
+    try:
+        restart_prompts = store.prompts_with_status(PROMPT_STATUS_SERVER_RESTARTING)
+    except ValueError:
+        return []
+    completed: list[str] = []
+    for record in restart_prompts:
+        if record.server_restart_required:
+            logger.info(
+                "Restart prompt %s still flagged for follow-up; leaving in server_restarting status",
+                record.prompt_id,
+            )
+            continue
+        summary = (record.result_summary or "").strip()
+        if not summary:
+            summary = "Server restart completed; no follow-up required."
+        store.mark_completed(record.prompt_id, summary)
+        completed.append(record.prompt_id)
+        logger.info("Restart prompt %s marked completed after reboot", record.prompt_id)
+    return completed
+
+
 def main(host: str = "0.0.0.0", port: int = 8080) -> None:
     ensure_dirs()
     preferred_project = os.environ.get("DEFAULT_PROJECT_ID")
@@ -2624,6 +3399,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
     audit_logger = configure_logging()
     store = PromptStore(PROMPT_DB_PATH, project_registry)
     human_task_store = HumanTaskStore(HUMAN_TASK_DB_PATH, project_registry)
+    environment_store = EnvironmentStore(ENVIRONMENT_DB_PATH, project_registry)
     preference_store = PreferenceStore(PREFERENCES_PATH)
     auth_manager = AuthManager(DATA_DIR)
     auth_manager.ensure_user("ulfurk@ulfurk.com", "dehost#1")
@@ -2633,7 +3409,14 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
     except SSHKeyError as exc:
         audit_logger.error("SSH key initialization failed: %s", exc)
     ws_manager = WebSocketManager(auth_manager, audit_logger)
-    events = EventStreamer(store, audit_logger, ws_manager, project_registry, human_task_store)
+    events = EventStreamer(
+        store,
+        audit_logger,
+        ws_manager,
+        project_registry,
+        human_task_store,
+        environment_store,
+    )
     ws_manager.event_streamer = events
     recovered_prompt_ids = store.consume_recovered_prompts()
     if recovered_prompt_ids:
@@ -2641,6 +3424,17 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         for prompt_id in recovered_prompt_ids:
             events.broadcast_prompt(prompt_id)
         events.broadcast_health()
+    resolved_restart_prompts = reconcile_server_restart_prompts(store, audit_logger)
+    if resolved_restart_prompts:
+        events.broadcast_health()
+    router_manager = TraefikConfigManager(
+        environment_store,
+        config_path=ROUTER_DYNAMIC_CONFIG,
+        certs_dir=ROUTER_CERTS_DIR,
+        logger=audit_logger,
+    )
+    router_manager.start()
+
     runner = CodexRunner(REPO_ROOT, events, audit_logger)
     display_manager = start_display_manager(store, audit_logger, preference_store, human_task_store)
     worker = PromptWorker(store, runner, audit_logger, display_manager, event_streamer=events)
@@ -2652,6 +3446,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
     APP_CONTEXT = {
         "store": store,
         "human_tasks": human_task_store,
+        "environments": environment_store,
         "audit_logger": audit_logger,
         "display_manager": display_manager,
         "auth": auth_manager,
@@ -2661,6 +3456,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         "ssh_keys": ssh_key_manager,
         "projects": project_registry,
         "preferences": preference_store,
+        "router_manager": router_manager,
     }
     if recovered_prompt_ids:
         schedule_display_refresh("recovered prompts")
@@ -2678,6 +3474,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         server.server_close()
         health_thread.stop()
         health_thread.join(timeout=5)
+        router_manager.stop()
 
 
 if __name__ == "__main__":

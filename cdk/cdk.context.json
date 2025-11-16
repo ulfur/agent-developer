@@ -1,0 +1,6 @@
+{
+  "availability-zones:account=123456789012:region=us-west-2": [
+    "us-west-2a",
+    "us-west-2b"
+  ]
+}

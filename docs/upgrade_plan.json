@@ -7,10 +7,12 @@
       "prompt": "Start by reading ROADMAP.md, README.md, and logs/progress.log. Inspect every Phase 0 task (Sections 0.1\u20130.3) and verify whether the checkboxes reflect the actual implementation status in the repo. Update ROADMAP.md with accurate checkmarks or notes, cite concrete files/commits when confirming work, and highlight any regressions or missing deliverables. Summarize what changed in logs/progress.log and queue follow-up prompts or Human Tasks if blockers remain.",
       "project_id": "nightshift",
       "priority": 0,
-      "status": "queued",
+      "status": "completed",
       "last_prompt_id": "dabe32d44a2e452cbd0a809e0b8d9fbe",
       "last_queued_at": "2025-11-16T00:07:59.353422+00:00",
-      "queued_count": 1
+      "queued_count": 1,
+      "completed_at": "2025-11-16T00:13:32.216202+00:00",
+      "notes": "Phase 0 checklists audited, discrepancies logged, and follow-up human task filed for the aux display before Phase 0.3 shipped."
     },
     {
       "id": "roadmap-next-steps-plan",
@@ -20,9 +22,9 @@
       "project_id": "nightshift",
       "priority": 0,
       "status": "queued",
-      "last_prompt_id": "898386582e2745588973a5f5eec9f32f",
-      "last_queued_at": "2025-11-16T00:07:59.728108+00:00",
-      "queued_count": 1
+      "last_prompt_id": "d900dac0bf4248ddb6f81d1b953f29c3",
+      "last_queued_at": "2025-11-16T10:14:33.216339+00:00",
+      "queued_count": 2
     },
     {
       "id": "upgrade-queue-metrics",
@@ -61,6 +63,30 @@
       "last_queued_at": "2025-11-15T06:42:37.502451+00:00"
     },
     {
+      "id": "upgrade-env-ui-polish",
+      "title": "Polish the project/environment directory UX",
+      "description": "Phase 2.4 shipped the first pass of the new registry cards; follow up with advanced filters, export controls, and tighter layout options.",
+      "prompt": "Re-read ROADMAP.md (Phase 2.4) and docs/upgrade_plan.json. Extend the Vue/Vuetify project/environment directory so operators can toggle columns, pin favourite environments, and export the current registry view as CSV. Document the UX updates and add regression tests for the new behaviours.",
+      "project_id": "nightshift",
+      "priority": 3,
+      "status": "queued",
+      "queued_count": 0,
+      "last_prompt_id": null,
+      "last_queued_at": null
+    },
+    {
+      "id": "upgrade-env-permissions",
+      "title": "Add per-project permissions to the environment directory",
+      "description": "The new registry cards currently assume a single operator role; add the groundwork for scoping or hiding environments/projects based on user permissions.",
+      "prompt": "Re-read ROADMAP.md (Phase 2.4) and docs/upgrade_plan.json. Design and implement a permissions model that lets the backend/UI restrict which projects/environments each user can see, update the APIs accordingly, and document the operator workflow. Queue Human Tasks for any manual credential work that remains.",
+      "project_id": "nightshift",
+      "priority": 4,
+      "status": "queued",
+      "queued_count": 0,
+      "last_prompt_id": null,
+      "last_queued_at": null
+    },
+    {
       "id": "upgrade-log-retention",
       "title": "Automate prompt log retention + archiving",
       "description": "Large prompt histories fill the SD card; add a retention policy that archives or prunes log files + prompt records after configurable thresholds.",
@@ -79,10 +105,12 @@
       "prompt": "Read ROADMAP.md for context. Implement the Section 0.1 branching discipline end-to-end: ensure the backend runner (and docs) always create a per-prompt nightshift/prompt-<id>-<slug> branch from dev, never touch main, enforce merges back into dev only when explicitly asked, and clean up local branches afterward. Update agents.md/README.md with the workflow, add configuration knobs, and include a smoke test or dry-run command. You are allowed to create follow-up tasks as needed - make sure to queue them if anything remains.",
       "project_id": "nightshift",
       "priority": 1,
-      "status": "queued",
+      "status": "completed",
       "last_prompt_id": "e2650439867e4967bdbe59cf9f18d805",
       "last_queued_at": "2025-11-15T21:18:41.199605+00:00",
-      "queued_count": 1
+      "queued_count": 1,
+      "completed_at": "2025-11-15T21:37:26.771625+00:00",
+      "notes": "git_branching.py + backend runner enforce branch discipline and docs were updated per ROADMAP 0.1."
     },
     {
       "id": "phase0-human-task-store",
@@ -91,10 +119,12 @@
       "prompt": "Start by reading ROADMAP.md for reference. Implement the Human Tasks system described in Section 0.2: add a human_tasks.json (or similar) datastore, CRUD backend endpoints, persistence helpers, and agent-side affordances so blockers can be logged/retrieved. Update the UI or CLI to surface the queue, wire metrics into /api/health, and document usage. Feel free to create follow-up tasks if new work appears.",
       "project_id": "nightshift",
       "priority": 2,
-      "status": "queued",
+      "status": "completed",
       "last_prompt_id": "5689f660f4c045cab24efe0d512614a9",
       "last_queued_at": "2025-11-15T21:18:41.480106+00:00",
-      "queued_count": 1
+      "queued_count": 1,
+      "completed_at": "2025-11-15T21:55:08.186749+00:00",
+      "notes": "backend/human_tasks.py store, API routes, CLI, and UI wiring now match ROADMAP 0.2 expectations."
     },
     {
       "id": "phase0-aux-display",
@@ -117,10 +147,12 @@
       "prompt": "Start by re-reading ROADMAP.md (Phase 1.1) and docs/upgrade_plan.json. Scaffold a cdk/ directory using AWS CDK (Python or TypeScript), add lockfiles and scripts to run `cdk synth/deploy`, and wire the stack to load instance/<name> context plus environment configuration. Provide README instructions, a smoke test/diff, and queue follow-up tasks if credentials or bootstrap steps are missing.",
       "project_id": "nightshift",
       "priority": 0,
-      "status": "queued",
+      "status": "completed",
       "queued_count": 1,
       "last_prompt_id": "970a057ec649433f8b28f03627c24f38",
-      "last_queued_at": "2025-11-16T00:16:37.846814+00:00"
+      "last_queued_at": "2025-11-16T00:16:37.846814+00:00",
+      "completed_at": "2025-11-16T02:29:01.825844+00:00",
+      "notes": "cdk/app.py + config loader, example instance YAML, README updates, and scripts/cdk.sh now cover the bootstrap workflow."
     },
     {
       "id": "phase1-cdk-infra",
@@ -129,10 +161,12 @@
       "prompt": "Start by re-reading ROADMAP.md (Phase 1.1) and docs/upgrade_plan.json. Extend the CDK stack to create the Nightshift VPC, subnets, security groups, storage (EFS/S3), and compute layer (EC2 or containers) with outputs tied to instance/<name> parameters. Document the resources, integrate with scripts/deploy tooling, and ensure configuration/state flows back into Nightshift. Queue follow-up prompts or Human Tasks wherever approvals or secrets are required.",
       "project_id": "nightshift",
       "priority": 1,
-      "status": "queued",
-      "queued_count": 1,
-      "last_prompt_id": "c47abf1af4f541f68184e1049d2b22c6",
-      "last_queued_at": "2025-11-16T00:16:38.846814+00:00"
+      "status": "completed",
+      "queued_count": 2,
+      "last_prompt_id": "0c8ac90a4e7b4b39a032c311ddabf920",
+      "last_queued_at": "2025-11-16T02:37:17.510099+00:00",
+      "completed_at": "2025-11-16T02:57:32.650838+00:00",
+      "notes": "cdk/nightshift_stack.py provisions VPC, networking, storage, and compute per Phase 1.1."
     },
     {
       "id": "phase1-container-runtime",
@@ -141,11 +175,130 @@
       "prompt": "Start by re-reading ROADMAP.md (Phase 1.2\u20131.3) and docs/upgrade_plan.json. Author multi-stage Dockerfiles for the backend and frontend, expose runtime configuration via env vars, and add a docker-compose (or similar) bundle that runs the API, workers, and auxiliary display. Implement the /workspaces volume plan so project repos mount predictably, add smoke tests, and document operator workflows. Queue follow-up prompts if additional runtime services or orchestration polish is needed.",
       "project_id": "nightshift",
       "priority": 1,
+      "status": "completed",
+      "queued_count": 2,
+      "last_prompt_id": "4299d31b8b684660a96788040c8ad0bf",
+      "last_queued_at": "2025-11-16T02:37:37.163614+00:00",
+      "completed_at": "2025-11-16T03:10:29.871578+00:00",
+      "notes": "docker/ Dockerfiles plus compose + workspace mounts fulfill Phase 1.2-1.3."
+    },
+    {
+      "id": "phase2-project-specs",
+      "title": "Define structured project specifications",
+      "description": "Phase 2.1 requires richer metadata for every onboarded project so the registry, environment tooling, and UI can reason about repos consistently.",
+      "prompt": "Start by re-reading ROADMAP.md (Phase 2.1) and docs/upgrade_plan.json. Inventory the existing projects/* metadata, design a richer project specification schema (repo/source URLs, default branches, runtime/toolchain requirements, env vars/secrets, smoke tests, and operator contacts), and implement validation helpers so ProjectRegistry and /api/projects enforce it. Populate the new schema for all current projects, publish docs explaining how to add new specs, and capture migration/testing notes in logs/progress.log. Queue follow-up prompts or Human Tasks if additional repos need onboarding or if operators must supply secrets.",
+      "project_id": "nightshift",
+      "priority": 0,
       "status": "queued",
       "queued_count": 1,
-      "last_prompt_id": "80d0e3b485874b239cd2e33d9e2b86d3",
-      "last_queued_at": "2025-11-16T00:16:39.846814+00:00"
+      "last_prompt_id": "301c772903ae4802a946d1b6afa02dcc",
+      "last_queued_at": "2025-11-16T10:22:11.038458+00:00"
+    },
+    {
+      "id": "phase2-environment-registry",
+      "title": "Build the shared environment registry + API",
+      "description": "Phase 2.2 needs a persistent catalog of dev/test environments (per project, host, and status) exposed through the backend.",
+      "prompt": "Start by re-reading ROADMAP.md (Phase 2.2) and docs/upgrade_plan.json. Design a data model (e.g., data/environments.json) to describe each environment's project, slug, host details, ports, health, owner, and lifecycle state, add backend modules + /api/environments CRUD endpoints, extend /api/health with aggregate stats, and provide a CLI helper for operators. Document how environment definitions tie back to the project specs, add regression tests, and queue follow-up prompts or Human Tasks for any infrastructure work (DNS, credentials, etc.) that must be handled manually.",
+      "project_id": "nightshift",
+      "priority": 1,
+      "status": "completed",
+      "queued_count": 1,
+      "last_prompt_id": "9f8cb36497de4f21bba3f68660144161",
+      "last_queued_at": "2025-11-16T10:22:11.464339+00:00",
+      "completed_at": "2025-11-16T10:50:26.881342+00:00",
+      "notes": "Environment registry landed with JSON schema, backend CRUD, CLI helper, and health metrics."
+    },
+    {
+      "id": "phase2-traefik-exposure",
+      "title": "Expose environments via Traefik routing",
+      "description": "Phase 2.3 calls for routing each registered environment through Traefik with predictable hostnames, TLS, and workspace mounts.",
+      "prompt": "Start by re-reading ROADMAP.md (Phase 2.3) and docs/upgrade_plan.json. Using the environment registry, implement Traefik (or similar) config generation that maps each environment to hostnames/paths, wires TLS certs, and reloads when the registry changes. Update docker-compose/CDK tooling to run the router alongside Nightshift, document operator steps for certificates and DNS, and add smoke tests. Log the work in logs/progress.log and queue follow-up prompts or Human Tasks for manual certificate/DNS steps you cannot automate.",
+      "project_id": "nightshift",
+      "priority": 2,
+      "status": "completed",
+      "queued_count": 1,
+      "last_prompt_id": "c1874c79ad064918978594efd1e014b2",
+      "last_queued_at": "2025-11-16T11:19:40.705749+00:00",
+      "completed_at": "2025-11-16T12:32:00.000000+00:00",
+      "notes": "Traefik service added to docker-compose/CDK, backend now generates dynamic config + docs/tests/log updates in place."
+    },
+    {
+      "id": "phase2-ui-integration",
+      "title": "Surface environment data in the UI",
+      "description": "Phase 2.4 needs the frontend to display project specs + environment states so operators can launch or debug hosts quickly.",
+      "prompt": "Start by re-reading ROADMAP.md (Phase 2.4) and docs/upgrade_plan.json. Update the Vue/Vuetify frontend to consume the new project/environment APIs, render searchable tables/cards with status badges, quick-launch links, and integration points with the Human Tasks queue. Stream updates over WebSockets where possible, document UX changes, and add regression tests. Record the rollout in logs/progress.log and queue follow-up prompts if further UX polish or permissions work is required.",
+      "project_id": "nightshift",
+      "priority": 3,
+      "status": "queued",
+      "queued_count": 1,
+      "last_prompt_id": "6059130d3b5d4fac84e6a66ed54cc277",
+      "last_queued_at": "2025-11-16T11:19:41.230647+00:00"
+    },
+    {
+      "id": "restore-queue-ux-plan",
+      "title": "Plan the queue/workspace coexistence UX",
+      "description": "Environment dashboards replaced the legacy landing page, and the prompt queue is no longer front-and-center. We need a clear plan for bringing the composer + chat thread back without losing the new workspace cards.",
+      "prompt": "Start by re-reading the_project.txt, README.md, ROADMAP.md, agents.md, projects/nightshift/agents.md, docs/upgrade_plan.json, and logs/progress.log. Audit the current frontend (frontend/index.html) plus any queue-related backend APIs to document what regressed when the workspace/environment cards shipped. Produce a written plan that explains how the queue/composer/chat thread should share the screen with the workspace overview (layouts, toggles, sticky behaviour, streaming expectations). Update docs/upgrade_plan.json with any implementation follow-ups, document the findings in logs/progress.log, and queue the implementation prompt(s) you recommend.",
+      "project_id": "nightshift",
+      "priority": 0,
+      "status": "completed",
+      "queued_count": 1,
+      "last_prompt_id": "eedb332130ce4831b09cbc3140f1cab9",
+      "last_queued_at": "2025-11-16T17:45:52.888099+00:00",
+      "completed_at": "2025-11-16T17:50:51.000000+00:00",
+      "notes": "Audit captured three regressions from the workspace overview launch: (1) main-layout/chat columns still clamp the page to viewport height (frontend/index.html:102-177) so the new overview row (frontend/index.html:5235-5355) steals vertical space and hides the queue/composer, (2) mobile layouts have no way to toggle between overview vs. queue/thread so the cards bury the Task Queue, and (3) PromptStore.list_prompts (backend/server.py:1450-1470) still sorts by created_at DESC which now misleads operators that expect FIFO order beside the workspace data. Implementation will dock the overview cards beside the queue on desktop, add collapse/tabs for tablet + mobile, keep queue/composer sticky under the header, wire project/environments clicks into the queue filter, and spawn a dedicated backend ordering follow-up."
+    },
+    {
+      "id": "restore-queue-ux-implementation",
+      "title": "Deliver the restored Task Queue experience",
+      "description": "Once the coexistence plan is in hand, implement the frontend/back-end tweaks so operators immediately see the queue/composer again while keeping the new workspace dashboard available.",
+      "prompt": "Re-read the_project.txt, README.md, ROADMAP.md, agents.md, projects/nightshift/agents.md, docs/upgrade_plan.json, and the planning notes from restore-queue-ux-plan. Update frontend/index.html (and any supporting modules) so the Task Queue list, composer, and conversation thread remain visible without scrolling past the workspace cards, add responsive behaviours for mobile/desktop, and keep the real-time websocket stream+retry controls working. Ensure any backend API changes stay backward compatible, refresh docs/screenshots as needed, run the usual frontend/backend verifications (py_compile, lint, smoke tests), and summarize the rollout plus follow-ups in logs/progress.log.",
+      "project_id": "nightshift",
+      "priority": 1,
+      "status": "queued",
+      "queued_count": 1,
+      "last_prompt_id": "fdf4d3df578042c89e4a19878e395381",
+      "last_queued_at": "2025-11-16T17:46:06.204391+00:00"
+    },
+    {
+      "id": "restore-queue-backend-ordering",
+      "title": "Fix queue ordering & metadata for the workspace layout",
+      "description": "Workspace cards pushed the Task Queue into a smaller viewport, so the API now needs explicit ordering + position metadata to avoid confusing operators.",
+      "prompt": "Re-read the_project.txt, README.md, ROADMAP.md, agents.md, projects/nightshift/agents.md, docs/upgrade_plan.json, and the restore-queue-ux-plan notes. Update PromptStore.list_prompts plus the /api/prompts + WebSocket payloads so queue snapshots return queued prompts ordered by enqueued_at, running prompts ordered by started_at, and append terminal items afterward. Include a queue_position (FIFO index within queued/running) and explicit status buckets so the frontend can render badges without guessing. Keep backward compatibility for existing fields, document the schema changes, add tests for the ordering rules, refresh frontend/index.html to consume the new metadata, and summarize the rollout + verifications in logs/progress.log.",
+      "project_id": "nightshift",
+      "priority": 1,
+      "status": "queued",
+      "queued_count": 1,
+      "last_prompt_id": "4ea2193992ff4b40b81616f6bd3fc87f",
+      "last_queued_at": "2025-11-16T17:51:36.407040+00:00"
+    },
+    {
+      "id": "env-dns-nebulapulse-preview",
+      "title": "Provision DNS/TLS for Nebula Pulse preview",
+      "description": "Create preview.nebulapulse.local + wildcard certs so the new preview environment can be exposed via Traefik.",
+      "prompt": "Operators need to provision DNS records + TLS certificates for preview.nebulapulse.local and wire them into Traefik. Document the steps/logs once finished.",
+      "project_id": "nightshift",
+      "priority": 2,
+      "status": "pending"
+    },
+    {
+      "id": "env-credentials-nightshift-dev",
+      "title": "Sync credentials for refreshed Nightshift dev host",
+      "description": "Ensure SSH keys + secrets referenced by data/environments.json exist on the Raspberry Pi host and operator vault.",
+      "prompt": "Audit the secrets referenced in the environment registry (agent password, operator SSH keys, Traefik router creds) and update the operator vault / host files as needed.",
+      "project_id": "nightshift",
+      "priority": 3,
+      "status": "pending"
+    },
+    {
+      "id": "env-tls-nightshift-dev",
+      "title": "Install TLS certs for the Nightshift dev router",
+      "description": "Request/renew *.nightshift.local certificates, drop them into data/router/certs, and confirm Traefik serves HTTPS for nightshift-dev routes.",
+      "prompt": "Operators must provision the certificates referenced by metadata.router.tls for env-nightshift-dev, copy them onto the host, and reload Traefik. Share thumbprints + DNS updates in #nightshift-ops.",
+      "project_id": "nightshift",
+      "priority": 2,
+      "status": "pending"
     }
   ],
-  "generated_at": "2025-11-16T01:50:26.278405+00:00"
+  "generated_at": "2025-11-16T17:51:36.407040+00:00"
 }

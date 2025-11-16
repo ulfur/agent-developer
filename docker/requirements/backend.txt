@@ -1,0 +1,4 @@
+# Runtime Python dependencies bundled inside the backend container image.
+# Keep this list minimal to preserve Raspberry Pi friendliness.
+Pillow==10.4.0
+PyYAML==6.0.2
