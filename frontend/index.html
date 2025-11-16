@@ -220,6 +220,25 @@
         font-size: 1rem;
       }
 
+      .chat-card-git {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+        margin-top: 0.35rem;
+      }
+
+      .chat-card-git .mdi {
+        font-size: 1rem;
+      }
+
+      .chat-card-git__details {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        align-items: baseline;
+      }
+
       .mobile-panel-controls {
         display: none;
       }
@@ -659,6 +678,15 @@
           line-clamp: 2;
           word-break: break-word;
         }
+
+        .chat-message {
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .chat-message .chat-bubble {
+          width: 100%;
+        }
       }
 
 
@@ -694,6 +722,15 @@
 
       .chat-message.codex {
         align-self: flex-start;
+      }
+
+      .task-pane .chat-message {
+        max-width: 100%;
+        width: 100%;
+      }
+
+      .task-pane .chat-message .chat-bubble {
+        width: 100%;
       }
 
       .chat-bubble {
@@ -823,17 +860,6 @@
         color: var(--text-primary);
       }
 
-      .detail-footer {
-        border-top: 1px solid var(--divider-color);
-        padding: 0.75rem 1.5rem 1.25rem;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1.5rem;
-        font-size: 0.85rem;
-        color: var(--text-muted);
-        flex-shrink: 0;
-      }
-
       .queue-composer {
         padding: 1rem 1.5rem 1.25rem;
         background-color: var(--app-surface);
@@ -845,6 +871,10 @@
       }
 
       .queue-composer--mobile-collapsed {
+        padding-bottom: 0.75rem;
+      }
+
+      .queue-composer--collapsed {
         padding-bottom: 0.75rem;
       }
 
@@ -873,6 +903,25 @@
 
       .mobile-composer-toggle__button {
         flex-shrink: 0;
+      }
+
+      .desktop-composer-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .desktop-composer-toggle__title {
+        font-weight: 600;
+        font-size: 0.95rem;
+        margin-bottom: 0.1rem;
+      }
+
+      .desktop-composer-toggle__hint {
+        font-size: 0.85rem;
+        color: var(--text-muted);
       }
 
       .queue-composer__body {
@@ -1318,6 +1367,7 @@
       .chat-card-title__reply,
       .chat-card-title__delete {
         flex-shrink: 0;
+        margin-left: 0.5rem;
       }
 
       @media (max-width: 640px) {
@@ -1326,7 +1376,8 @@
         }
 
         .chat-card-title__cancel,
-        .chat-card-title__reply {
+        .chat-card-title__reply,
+        .chat-card-title__delete {
           margin-left: auto;
         }
       }
@@ -1336,6 +1387,8 @@
         align-items: center;
         gap: 0.5rem;
         flex-wrap: wrap;
+        font-size: 0.75rem;
+        line-height: 1.2;
       }
 
       .chat-card-subtitle__attempts {
@@ -2199,6 +2252,7 @@
           const retrying = ref(false);
           const canceling = ref(false);
           const restarting = ref(false);
+          const rollingBack = ref(false);
           const promptStreams = reactive({});
           const editPromptDialogVisible = ref(false);
           const editPromptText = ref('');
@@ -2225,7 +2279,7 @@
           const headerIconSrc = computed(() => HEADER_ICON_SOURCES[themeMode.value] || HEADER_ICON_SOURCES.dark);
           const route = useRoute();
           const router = useRouter();
-          const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'long' });
+          const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
           const timeFormatter = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
           const timestampFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
           const queueTimestampFormatter = new Intl.DateTimeFormat(undefined, {
@@ -2276,7 +2330,7 @@
           const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : MOBILE_BREAKPOINT);
           const activeMobilePanel = ref('queue');
           const isMobileLayout = computed(() => viewportWidth.value < MOBILE_BREAKPOINT);
-          const mobileComposerExpanded = ref(!isMobileLayout.value);
+          const composerExpanded = ref(!isMobileLayout.value);
           const isAuthenticated = computed(() => Boolean(authToken.value));
           const guidedTourActive = ref(false);
           const guidedTourStepIndex = ref(0);
@@ -2392,11 +2446,8 @@
             }
           };
 
-          const toggleMobileComposer = () => {
-            if (!isMobileLayout.value) {
-              return;
-            }
-            mobileComposerExpanded.value = !mobileComposerExpanded.value;
+          const toggleComposer = () => {
+            composerExpanded.value = !composerExpanded.value;
           };
 
           watch(
@@ -2441,12 +2492,12 @@
 
           watch(isMobileLayout, (isMobile) => {
             if (!isMobile) {
-              mobileComposerExpanded.value = true;
+              composerExpanded.value = true;
               activeMobilePanel.value = 'queue';
               refreshGuidedTourHighlight();
               return;
             }
-            mobileComposerExpanded.value = false;
+            composerExpanded.value = false;
             if (guidedTourActive.value) {
               closeGuidedTour();
             }
@@ -2463,20 +2514,20 @@
           });
 
           watch(humanTaskReplyTarget, (target) => {
-            if (target && isMobileLayout.value) {
-              mobileComposerExpanded.value = true;
+            if (target && !composerExpanded.value) {
+              composerExpanded.value = true;
             }
           });
 
           watch(promptReplyTarget, (target) => {
-            if (target && isMobileLayout.value) {
-              mobileComposerExpanded.value = true;
+            if (target && !composerExpanded.value) {
+              composerExpanded.value = true;
             }
           });
 
           watch(promptText, (value) => {
-            if (value && isMobileLayout.value) {
-              mobileComposerExpanded.value = true;
+            if (value && !composerExpanded.value) {
+              composerExpanded.value = true;
             }
           });
 
@@ -2886,7 +2937,7 @@
             if (!isoString) return '—';
             try {
               const date = new Date(isoString);
-              return `${dateFormatter.format(date)} at ${timeFormatter.format(date)}`;
+              return `${dateFormatter.format(date)} · ${timeFormatter.format(date)}`;
             } catch (error) {
               console.error('Unable to format date', error);
               return isoString;
@@ -3173,6 +3224,28 @@
               return null;
             }
             return elapsedMs / 1000;
+          };
+
+          const parseChronologicalTimestamp = (value) => {
+            if (!value) {
+              return Number.POSITIVE_INFINITY;
+            }
+            const parsed = Date.parse(value);
+            if (!Number.isFinite(parsed)) {
+              return Number.POSITIVE_INFINITY;
+            }
+            return parsed;
+          };
+
+          const getQueueChronologyTimestamp = (item, status) => {
+            const normalized = (status || '').toLowerCase();
+            if (normalized === 'queued') {
+              return item.enqueued_at || item.created_at || item.updated_at || item.last_finished_at || '';
+            }
+            if (normalized === 'running' || normalized === PROMPT_STATUS_SERVER_RESTARTING) {
+              return item.started_at || item.updated_at || item.enqueued_at || item.created_at || '';
+            }
+            return item.updated_at || item.last_finished_at || item.created_at || '';
           };
 
           const getStreamState = (promptId) => {
@@ -3472,6 +3545,7 @@
                     : typeof item.queuePosition === 'number'
                       ? item.queuePosition
                       : index + 1;
+                const chronologySortKey = parseChronologicalTimestamp(getQueueChronologyTimestamp(item, status));
                 return {
                   ...item,
                   queueIndex: queuePosition,
@@ -3479,6 +3553,7 @@
                   runtimeDisplay: runtimeSeconds != null ? formatQueueDuration(runtimeSeconds) : null,
                   detailLine: detail,
                   orderIndex: index,
+                  chronologySortKey,
                 };
               })
               .filter(Boolean);
@@ -3499,9 +3574,20 @@
               if (positionA !== positionB) {
                 return positionA - positionB;
               }
+              const chronologyA =
+                typeof a.chronologySortKey === 'number' && Number.isFinite(a.chronologySortKey)
+                  ? a.chronologySortKey
+                  : Number.POSITIVE_INFINITY;
+              const chronologyB =
+                typeof b.chronologySortKey === 'number' && Number.isFinite(b.chronologySortKey)
+                  ? b.chronologySortKey
+                  : Number.POSITIVE_INFINITY;
+              if (chronologyA !== chronologyB) {
+                return chronologyA - chronologyB;
+              }
               return (a.orderIndex ?? 0) - (b.orderIndex ?? 0);
             });
-            return entries.map(({ orderIndex, ...rest }) => rest);
+            return entries.map(({ orderIndex, chronologySortKey, ...rest }) => rest);
           });
 
           watch(
@@ -3634,6 +3720,30 @@
             return isRunningStatus(status);
           };
 
+          const promptCommitList = (prompt) => {
+            if (!prompt) {
+              return [];
+            }
+            const commits = prompt.git_prompt_commits;
+            if (Array.isArray(commits)) {
+              return commits.filter((commit) => typeof commit === 'string' && commit);
+            }
+            return [];
+          };
+
+          const canRollbackPrompt = (prompt) => {
+            if (!prompt || !prompt.prompt_id) {
+              return false;
+            }
+            if ((prompt.status || '').toLowerCase() !== 'completed') {
+              return false;
+            }
+            if (!promptCommitList(prompt).length) {
+              return false;
+            }
+            return !prompt.git_rollback_at;
+          };
+
           const canReplyToPrompt = (prompt) => {
             if (!prompt || !prompt.prompt_id) {
               return false;
@@ -3642,6 +3752,29 @@
           };
 
           const canReplyToSelectedPrompt = computed(() => canReplyToPrompt(selectedPrompt.value));
+          const canRollbackSelectedPrompt = computed(() => canRollbackPrompt(selectedPrompt.value));
+
+          const selectedPromptGitInfo = computed(() => {
+            const prompt = selectedPrompt.value;
+            if (!prompt) {
+              return null;
+            }
+            const commits = promptCommitList(prompt);
+            const branchName = prompt.git_branch_name || '';
+            const baseBranch = prompt.git_base_branch || '';
+            const rollbackAt = prompt.git_rollback_at || '';
+            const rollbackCommit = prompt.git_rollback_commit || '';
+            if (!branchName && !commits.length && !rollbackAt && !rollbackCommit) {
+              return null;
+            }
+            return {
+              branchName: branchName || baseBranch || 'Prompt branch',
+              baseBranch,
+              commitCount: commits.length,
+              rollbackAt,
+              rollbackCommit,
+            };
+          });
 
           const blockingHumanTaskCount = computed(() => {
             const summary = humanTasksSummary.value || {};
@@ -4394,9 +4527,11 @@
             humanTaskReplyTarget.value = { ...task };
             promptReplyTarget.value = null;
             humanTasksMenuOpen.value = false;
+            if (!composerExpanded.value) {
+              composerExpanded.value = true;
+            }
             if (isMobileLayout.value) {
               activeMobilePanel.value = 'queue';
-              mobileComposerExpanded.value = true;
             }
           };
 
@@ -4434,9 +4569,11 @@
             };
             humanTaskReplyTarget.value = null;
             humanTasksMenuOpen.value = false;
+            if (!composerExpanded.value) {
+              composerExpanded.value = true;
+            }
             if (isMobileLayout.value) {
               activeMobilePanel.value = 'queue';
-              mobileComposerExpanded.value = true;
             }
           };
 
@@ -4745,6 +4882,43 @@
               return;
             }
             await queuePromptRetry(restarting, 'Unable to restart prompt');
+          };
+
+          const rollbackSelectedPrompt = async () => {
+            if (
+              !isAuthenticated.value ||
+              !selectedPrompt.value ||
+              !canRollbackSelectedPrompt.value ||
+              rollingBack.value
+            ) {
+              return;
+            }
+            const confirmed =
+              typeof window === 'undefined' ? true : window.confirm("Rollback this prompt's commits?");
+            if (!confirmed) {
+              return;
+            }
+            rollingBack.value = true;
+            try {
+              const response = await api(`/api/prompts/${selectedPrompt.value.prompt_id}/rollback`, {
+                method: 'POST',
+              });
+              const updated = response?.prompt;
+              if (updated && updated.prompt_id) {
+                selectedPrompt.value = { ...selectedPrompt.value, ...updated };
+                const queueIndex = queue.value.findIndex((entry) => entry.prompt_id === updated.prompt_id);
+                if (queueIndex !== -1) {
+                  queue.value.splice(queueIndex, 1, { ...queue.value[queueIndex], ...updated });
+                  refreshLocalQueueStatusBuckets();
+                }
+              } else if (selectedPrompt.value?.prompt_id) {
+                await refreshSelectedPrompt(selectedPrompt.value.prompt_id);
+              }
+            } catch (error) {
+              alert(error.message || 'Unable to rollback prompt');
+            } finally {
+              rollingBack.value = false;
+            }
           };
 
           const performCancelAction = async (targetPrompt = selectedPrompt.value) => {
@@ -5076,7 +5250,7 @@
             selectedPrompt,
             isMobileLayout,
             activeMobilePanel,
-            mobileComposerExpanded,
+            composerExpanded,
             workspacePanelCollapsed,
             loading,
             submitting,
@@ -5113,6 +5287,7 @@
             retrying,
             canceling,
             restarting,
+            rollingBack,
             formatDate,
             submitPrompt,
             selectPrompt,
@@ -5122,6 +5297,8 @@
             cancelSelectedPrompt,
             cancelQueueEntry,
             restartSelectedPrompt,
+            canRollbackSelectedPrompt,
+            rollbackSelectedPrompt,
             canReplyToPrompt,
             canReplyToSelectedPrompt,
             copyToClipboard,
@@ -5129,6 +5306,7 @@
             attemptKey,
             globalContext,
             selectedPromptProjectName,
+            selectedPromptGitInfo,
             activeStream,
             showLiveStream,
             liveAttemptNumber,
@@ -5141,7 +5319,7 @@
             goHome,
             showQueuePanel,
             showThreadPanel,
-            toggleMobileComposer,
+            toggleComposer,
             startGuidedTour,
             closeGuidedTour,
             previousGuidedTourStep,
@@ -6141,14 +6319,15 @@
                         data-tour-id="tour-prompt-composer"
                         :class="{
                           'queue-composer--mobile': isMobileLayout,
-                          'queue-composer--mobile-collapsed': isMobileLayout && !mobileComposerExpanded,
+                          'queue-composer--mobile-collapsed': isMobileLayout && !composerExpanded,
+                          'queue-composer--collapsed': !isMobileLayout && !composerExpanded,
                         }"
                       >
                         <div v-if="isMobileLayout" class="mobile-composer-toggle">
                           <div class="mobile-composer-toggle__text">
                             <div class="mobile-composer-toggle__title">Prompt composer</div>
                             <div class="mobile-composer-toggle__hint">
-                              {{ mobileComposerExpanded ? 'Hide input area' : 'Tap to add instructions' }}
+                              {{ composerExpanded ? 'Hide input area' : 'Tap to add instructions' }}
                             </div>
                           </div>
                           <v-btn
@@ -6156,14 +6335,35 @@
                             variant="text"
                             density="comfortable"
                             size="small"
-                            :prepend-icon="mobileComposerExpanded ? 'mdi-chevron-up' : 'mdi-pencil'"
-                            @click="toggleMobileComposer"
+                            :prepend-icon="composerExpanded ? 'mdi-chevron-up' : 'mdi-pencil'"
+                            @click="toggleComposer"
                           >
-                            {{ mobileComposerExpanded ? 'Hide' : 'Compose' }}
+                            {{ composerExpanded ? 'Hide' : 'Compose' }}
+                          </v-btn>
+                        </div>
+                        <div v-else class="desktop-composer-toggle">
+                          <div>
+                            <div class="desktop-composer-toggle__title">Prompt composer</div>
+                            <div class="desktop-composer-toggle__hint">
+                              {{
+                                composerExpanded
+                                  ? 'Collapse the input area to focus on the queue'
+                                  : 'Show the prompt composer when you need it'
+                              }}
+                            </div>
+                          </div>
+                          <v-btn
+                            variant="text"
+                            density="comfortable"
+                            size="small"
+                            :prepend-icon="composerExpanded ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                            @click="toggleComposer"
+                          >
+                            {{ composerExpanded ? 'Hide input area' : 'Show input area' }}
                           </v-btn>
                         </div>
                         <v-expand-transition>
-                          <div class="queue-composer__body" v-show="!isMobileLayout || mobileComposerExpanded">
+                          <div class="queue-composer__body" v-show="composerExpanded">
                             <div v-if="promptReplyTarget" class="prompt-reply-banner">
                               <span class="mdi mdi-reply prompt-reply-banner__icon" aria-hidden="true"></span>
                               <div class="prompt-reply-banner__text">
@@ -6321,7 +6521,7 @@
                     lg="8"
                     class="d-flex flex-column"
                   >
-                    <v-card elevation="0" class="panel-card chat-card" data-tour-id="tour-thread-panel">
+                    <v-card elevation="0" class="panel-card chat-card task-pane" data-tour-id="tour-thread-panel">
                       <v-card-title class="chat-card__header justify-space-between align-start">
                         <div class="chat-card__header-main">
                           <div
@@ -6384,6 +6584,15 @@
                             <span class="chat-card-subtitle__attempts">
                               Attempts {{ selectedPrompt.attempts || 0 }}
                             </span>
+                            <span>
+                              Created {{ formatDate(selectedPrompt.created_at) }}
+                            </span>
+                            <span>
+                              Updated {{ formatDate(selectedPrompt.updated_at) }}
+                            </span>
+                            <span>
+                              Status {{ selectedPrompt.status || '—' }}
+                            </span>
                           </div>
                           <div class="text-caption text-medium-emphasis" v-else>
                             Select a prompt from the queue to review Nightshift output.
@@ -6410,8 +6619,39 @@
                               }}
                             </span>
                           </div>
+                          <div
+                            v-if="selectedPromptGitInfo"
+                            class="chat-card-git text-medium-emphasis"
+                          >
+                            <span class="mdi mdi-source-branch" aria-hidden="true"></span>
+                            <div class="chat-card-git__details">
+                              <span>{{ selectedPromptGitInfo.branchName }}</span>
+                              <span v-if="selectedPromptGitInfo.commitCount > 0">
+                                · {{ selectedPromptGitInfo.commitCount }} commit
+                                <span v-if="selectedPromptGitInfo.commitCount !== 1">s</span>
+                              </span>
+                              <span v-else>
+                                · No commits recorded
+                              </span>
+                              <span v-if="selectedPromptGitInfo.rollbackAt">
+                                · Rolled back {{ formatTimestamp(selectedPromptGitInfo.rollbackAt) }}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                         <div class="thread-header__actions">
+                          <v-btn
+                            v-if="canRollbackSelectedPrompt"
+                            color="error"
+                            variant="tonal"
+                            size="small"
+                            prepend-icon="mdi-history"
+                            :loading="rollingBack"
+                            :disabled="rollingBack"
+                            @click="rollbackSelectedPrompt"
+                          >
+                            Rollback
+                          </v-btn>
                           <v-btn
                             v-if="canRestartSelectedPrompt"
                             color="warning"
@@ -6662,11 +6902,6 @@
                             No Nightshift output captured for this prompt yet.
                           </div>
                         </template>
-                      </div>
-                      <div v-if="selectedPrompt" class="detail-footer">
-                        <span>Created {{ formatDate(selectedPrompt.created_at) }}</span>
-                        <span>Updated {{ formatDate(selectedPrompt.updated_at) }}</span>
-                        <span>Status {{ selectedPrompt.status }}</span>
                       </div>
                     </v-card>
                   </v-col>

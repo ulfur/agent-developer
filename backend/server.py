@@ -1175,6 +1175,16 @@ class PromptRecord:
     reply_to_prompt_id: Optional[str] = None
     server_restart_required: bool = False
     server_restart_marked_at: Optional[str] = None
+    git_branch_name: Optional[str] = None
+    git_branch_slug: Optional[str] = None
+    git_base_branch: Optional[str] = None
+    git_base_commit: Optional[str] = None
+    git_merge_commit: Optional[str] = None
+    git_prompt_commits: list[str] = field(default_factory=list)
+    git_notes: list[str] = field(default_factory=list)
+    git_rollback_commit: Optional[str] = None
+    git_rollback_at: Optional[str] = None
+    git_rollback_commits: list[str] = field(default_factory=list)
 
 
 class PromptStore:
@@ -1230,6 +1240,16 @@ class PromptStore:
                 payload.setdefault("last_run_seconds", None)
                 payload.setdefault("server_restart_required", False)
                 payload.setdefault("server_restart_marked_at", None)
+                payload.setdefault("git_branch_name", None)
+                payload.setdefault("git_branch_slug", None)
+                payload.setdefault("git_base_branch", None)
+                payload.setdefault("git_base_commit", None)
+                payload.setdefault("git_merge_commit", None)
+                payload.setdefault("git_rollback_commit", None)
+                payload.setdefault("git_rollback_at", None)
+                payload["git_prompt_commits"] = list(payload.get("git_prompt_commits") or [])
+                payload["git_notes"] = list(payload.get("git_notes") or [])
+                payload["git_rollback_commits"] = list(payload.get("git_rollback_commits") or [])
                 payload["reply_to_prompt_id"] = self._normalize_reply_to_prompt_id(
                     payload.get("reply_to_prompt_id")
                 )
@@ -1693,6 +1713,57 @@ class PromptStore:
         """Backwards-compatible wrapper for API prompt edits."""
         return self.update_prompt_text(prompt_id, new_text)
 
+    def update_prompt_git_metadata(self, prompt_id: str, metadata: Dict[str, Any]) -> Optional[PromptRecord]:
+        if not metadata:
+            return None
+        with self._lock:
+            record = self._records.get(prompt_id)
+            if record is None:
+                return None
+            changed = False
+
+            def _assign(attr: str, value: Any) -> None:
+                nonlocal changed
+                if value is None:
+                    return
+                if getattr(record, attr) != value:
+                    setattr(record, attr, value)
+                    changed = True
+
+            _assign("git_branch_name", metadata.get("branch_name"))
+            _assign("git_branch_slug", metadata.get("branch_slug"))
+            _assign("git_base_branch", metadata.get("base_branch"))
+            _assign("git_base_commit", metadata.get("base_commit"))
+            _assign("git_merge_commit", metadata.get("merge_commit"))
+            _assign("git_rollback_commit", metadata.get("rollback_commit"))
+            _assign("git_rollback_at", metadata.get("rollback_at"))
+
+            commits = metadata.get("commits")
+            if commits is not None:
+                new_commits = [str(commit) for commit in commits if commit]
+                if record.git_prompt_commits != new_commits:
+                    record.git_prompt_commits = new_commits
+                    changed = True
+
+            rollback_commits = metadata.get("rollback_commits")
+            if rollback_commits is not None:
+                new_rollback = [str(commit) for commit in rollback_commits if commit]
+                if record.git_rollback_commits != new_rollback:
+                    record.git_rollback_commits = new_rollback
+                    changed = True
+
+            notes = metadata.get("notes") or []
+            if notes:
+                record.git_notes.extend(str(note) for note in notes if note)
+                changed = True
+
+            if changed:
+                record.updated_at = utcnow_iso()
+        if changed:
+            self._persist()
+            return record
+        return record
+
     def consume_recovered_prompts(self) -> List[str]:
         with self._lock:
             recovered = list(self._recovered_prompt_ids)
@@ -1811,7 +1882,7 @@ class CodexRunner:
         *,
         project_id: Optional[str] = None,
         scope: Optional[ProjectScope] = None,
-    ) -> tuple[str, bool, bool]:
+    ) -> tuple[str, bool, bool, Dict[str, Any]]:
         base_cmd = [self.codex_bin]
         if self.enable_search:
             base_cmd.append("--search")
@@ -1839,6 +1910,7 @@ class CodexRunner:
         git_session = None
         git_notes: list[str] = []
         git_setup_error: Optional[str] = None
+        git_metadata: Dict[str, Any] = {}
         scope_payload = scope.to_payload() if scope else {
             "description": "Scope guard fallback: allow entire repository",
             "allow": ["**"],
@@ -1899,11 +1971,22 @@ class CodexRunner:
         if not skip_execution and self.branch_discipline is not None:
             try:
                 git_session = self.branch_discipline.begin_run(prompt_id, prompt_text)
-                if git_session and git_session.notes:
-                    git_notes.extend(git_session.notes)
+                if git_session:
+                    git_metadata.update(
+                        {
+                            "branch_name": git_session.branch_name,
+                            "branch_slug": git_session.slug,
+                            "base_branch": git_session.base_branch,
+                            "base_commit": git_session.base_commit,
+                        }
+                    )
+                    if git_session.notes:
+                        git_notes.extend(git_session.notes)
+                        git_metadata.setdefault("notes", []).extend(git_session.notes)
             except GitBranchError as exc:  # type: ignore[arg-type]
                 git_setup_error = str(exc)
                 git_notes.append(f"Git branch preparation failed: {git_setup_error}")
+                git_metadata.setdefault("notes", []).append(f"Git branch preparation failed: {git_setup_error}")
 
         if not skip_execution and git_setup_error is None:
             try:
@@ -1978,15 +2061,25 @@ class CodexRunner:
         elapsed_seconds = time.perf_counter() - start_time
         completed_at = utcnow_iso()
         cleanup_error: Optional[str] = None
-        if git_session:
+        if git_session and self.branch_discipline is not None:
             try:
-                if git_session and self.branch_discipline is not None:
-                    cleanup_notes = self.branch_discipline.finalize_run(git_session)
-                    if cleanup_notes:
-                        git_notes.extend(cleanup_notes)
+                cleanup_result = self.branch_discipline.finalize_run(git_session)
+                if cleanup_result:
+                    if cleanup_result.notes:
+                        git_notes.extend(cleanup_result.notes)
+                        git_metadata.setdefault("notes", []).extend(cleanup_result.notes)
+                    if cleanup_result.merge_commit:
+                        git_metadata["merge_commit"] = cleanup_result.merge_commit
+                    if cleanup_result.commits:
+                        git_metadata["commits"] = cleanup_result.commits
+                    if cleanup_result.base_branch:
+                        git_metadata.setdefault("base_branch", cleanup_result.base_branch)
+                    if cleanup_result.base_commit and not git_metadata.get("base_commit"):
+                        git_metadata["base_commit"] = cleanup_result.base_commit
             except GitBranchError as exc:
                 cleanup_error = str(exc)
                 git_notes.append(f"Git cleanup blocked: {cleanup_error}")
+                git_metadata.setdefault("notes", []).append(f"Git cleanup blocked: {cleanup_error}")
 
         with self._lock:
             canceled = self._cancel_target == prompt_id
@@ -2028,7 +2121,7 @@ class CodexRunner:
         self._broadcast_stream(prompt_id, "stdout", "", done=True)
         self._broadcast_stream(prompt_id, "stderr", "", done=True)
 
-        return summary, success, canceled
+        return summary, success, canceled, git_metadata
 
     def _broadcast_stream(
         self,
@@ -2094,7 +2187,7 @@ class PromptWorker(threading.Thread):
                 if self.store.project_registry:
                     project_scope = self.store.project_registry.resolved_scope_for_id(record.project_id)
                 prompt_text = self._prepare_prompt_text(record)
-                summary, success, canceled = self.runner.run(
+                summary, success, canceled, git_metadata = self.runner.run(
                     prompt_id,
                     prompt_text,
                     context_text,
@@ -2102,6 +2195,8 @@ class PromptWorker(threading.Thread):
                     project_id=record.project_id,
                     scope=project_scope,
                 )
+                if git_metadata:
+                    self.store.update_prompt_git_metadata(prompt_id, git_metadata)
             finally:
                 with self._current_lock:
                     self._current_prompt_id = None
@@ -2951,6 +3046,73 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 {"prompt_id": prompt_id, "status": "canceling", "restart": restart_requested},
                 status=202,
             )
+        elif clean_path.startswith("/api/prompts/") and clean_path.endswith("/rollback"):
+            parts = clean_path.split("/")
+            if len(parts) < 4:
+                self._write_json({"error": "invalid rollback path"}, status=400)
+                return
+            prompt_id = parts[-2]
+            store: PromptStore = APP_CONTEXT["store"]
+            record = store.get_prompt(prompt_id)
+            if not record:
+                self._write_json({"error": "prompt not found"}, status=404)
+                return
+            status = (record.status or "").lower()
+            if status != "completed":
+                self._write_json({"error": "only completed prompts can be rolled back"}, status=400)
+                return
+            commits = list(getattr(record, "git_prompt_commits", []) or [])
+            if not commits:
+                self._write_json({"error": "prompt has no commits to roll back"}, status=400)
+                return
+            if getattr(record, "git_rollback_at", None):
+                self._write_json({"error": "prompt has already been rolled back"}, status=409)
+                return
+            if PromptBranchDiscipline is None:
+                self._write_json({"error": "git rollback support unavailable"}, status=503)
+                return
+            discipline = PromptBranchDiscipline(REPO_ROOT, logger=APP_CONTEXT.get("audit_logger"))
+            try:
+                rollback_result = discipline.rollback_prompt_commits(
+                    prompt_id,
+                    record.text,
+                    commits,
+                    slug=getattr(record, "git_branch_slug", None),
+                )
+            except GitBranchError as exc:  # type: ignore[arg-type]
+                self._write_json({"error": str(exc)}, status=400)
+                return
+            if not rollback_result.rollback_commit:
+                self._write_json({"error": "rollback did not complete"}, status=409)
+                return
+            timestamp = utcnow_iso()
+            metadata = {
+                "rollback_commit": rollback_result.rollback_commit,
+                "rollback_at": timestamp,
+                "rollback_commits": rollback_result.reverted_commits,
+                "notes": rollback_result.notes,
+            }
+            updated_record = store.update_prompt_git_metadata(prompt_id, metadata) or record
+            log_path = Path(updated_record.log_path)
+            log_lines = [
+                "",
+                f"Rollback completed at {timestamp}",
+                f"Rolled back commits: {', '.join(rollback_result.reverted_commits) if rollback_result.reverted_commits else '<none>'}",
+                f"Rollback commit: {rollback_result.rollback_commit}",
+            ]
+            try:
+                with log_path.open("a", encoding="utf-8") as log_file:
+                    log_file.write("\n".join(log_lines) + "\n")
+            except OSError:
+                APP_CONTEXT.get("audit_logger").warning("Unable to append rollback entry for %s", prompt_id)
+            APP_CONTEXT["audit_logger"].info("Rolled back prompt %s", prompt_id)
+            events = APP_CONTEXT.get("events")
+            if events:
+                events.broadcast_prompt(prompt_id)
+                events.broadcast_queue()
+            schedule_display_refresh("rollback")
+            registry = APP_CONTEXT.get("projects")
+            self._write_json({"prompt": build_prompt_payload(updated_record, registry)})
         elif clean_path == "/api/user/password":
             self._handle_password_change()
         else:

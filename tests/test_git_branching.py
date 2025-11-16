@@ -39,12 +39,19 @@ class PromptBranchDisciplineTests(unittest.TestCase):
         self.assertIsNotNone(session)
         current_branch = self._git(["branch", "--show-current"]).stdout.strip()
         self.assertEqual(current_branch, session.branch_name)
-        cleanup_notes = discipline.finalize_run(session)
-        self.assertTrue(any("Deleted" in note for note in cleanup_notes))
+        (self.repo_root / "README.md").write_text("branch update\n", encoding="utf-8")
+        self._git(["commit", "-am", "prompt commit"])
+        cleanup = discipline.finalize_run(session)
+        self.assertIsNotNone(cleanup)
+        assert cleanup is not None  # hint for type checkers
+        self.assertTrue(any("Deleted" in note for note in cleanup.notes))
+        self.assertEqual(len(cleanup.commits), 1)
         current_branch = self._git(["branch", "--show-current"]).stdout.strip()
         self.assertEqual(current_branch, "dev")
         branches = self._git(["branch"]).stdout
         self.assertNotIn(session.branch_name, branches)
+        log_message = self._git(["log", "-1", "--pretty=%s"]).stdout.strip()
+        self.assertEqual(log_message, "prompt commit")
 
     def test_begin_run_rejects_dirty_workspace(self) -> None:
         (self.repo_root / "README.md").write_text("dirty\n", encoding="utf-8")
@@ -58,6 +65,26 @@ class PromptBranchDisciplineTests(unittest.TestCase):
         (self.repo_root / "README.md").write_text("pending\n", encoding="utf-8")
         with self.assertRaises(GitBranchError):
             discipline.finalize_run(session)
+
+    def test_rollback_prompt_commits(self) -> None:
+        discipline = PromptBranchDiscipline(self.repo_root)
+        session = discipline.begin_run("abc123", "Add telemetry counters")
+        (self.repo_root / "README.md").write_text("branch update\n", encoding="utf-8")
+        self._git(["commit", "-am", "prompt commit"])
+        cleanup = discipline.finalize_run(session)
+        assert cleanup is not None
+        self.assertGreater(len(cleanup.commits), 0)
+        content_after = (self.repo_root / "README.md").read_text(encoding="utf-8")
+        self.assertEqual(content_after, "branch update\n")
+        rollback = discipline.rollback_prompt_commits(
+            "abc123",
+            "Add telemetry counters",
+            cleanup.commits,
+            slug=session.slug,
+        )
+        self.assertIsNotNone(rollback.rollback_commit)
+        reverted = (self.repo_root / "README.md").read_text(encoding="utf-8")
+        self.assertEqual(reverted, "root\n")
 
 
 if __name__ == "__main__":

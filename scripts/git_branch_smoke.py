@@ -60,10 +60,11 @@ def main() -> int:
     else:
         logger.info("Branch discipline disabled; nothing to test.")
     try:
-        cleanup_notes = discipline.finalize_run(session)
-        notes.extend(cleanup_notes)
-        if cleanup_notes:
-            logger.info("%s", cleanup_notes[-1])
+        cleanup_result = discipline.finalize_run(session)
+        if cleanup_result:
+            notes.extend(cleanup_result.notes)
+            if cleanup_result.notes:
+                logger.info("%s", cleanup_result.notes[-1])
     except GitBranchError as exc:
         logger.error("Cleanup failed: %s", exc)
         return 2
