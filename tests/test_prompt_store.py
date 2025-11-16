@@ -132,5 +132,18 @@ class PromptStoreListPromptTests(PromptStoreTestCase):
         self.assertEqual(snapshot["status_buckets"]["running"]["count"], 1)
 
 
+class PromptStoreReplyReferenceTests(PromptStoreTestCase):
+    def test_add_prompt_records_reply_reference(self) -> None:
+        base_prompt = self.store.add_prompt("initial work")
+        self.store.mark_completed(base_prompt.prompt_id, "done")
+        follow_up = self.store.add_prompt("follow up", reply_to_prompt_id=base_prompt.prompt_id)
+        self.assertEqual(follow_up.reply_to_prompt_id, base_prompt.prompt_id)
+        snapshot = self.store.list_prompts()
+        follow_up_entry = next(
+            item for item in snapshot["items"] if item["prompt_id"] == follow_up.prompt_id
+        )
+        self.assertEqual(follow_up_entry["reply_to_prompt_id"], base_prompt.prompt_id)
+
+
 if __name__ == "__main__":
     unittest.main()

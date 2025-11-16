@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import random
 import socket
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -32,6 +33,27 @@ BODY_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 )
 
+HEADER_SUBTITLE_MESSAGES: tuple[str, ...] = (
+    "all day every day",
+    "the code writes itself",
+    "you think, code happens",
+    "commit, push, repeat",
+    "deploys before sunrise",
+    "sleep is for staging",
+    "bugs fear this place",
+    "runtime errors take PTO",
+)
+
+
+def pick_header_subtitle(previous: str | None = None) -> str:
+    """Return a random subtitle that differs from the previous value when possible."""
+    cleaned_previous = (previous or "").strip()
+    available = [message for message in HEADER_SUBTITLE_MESSAGES if message != cleaned_previous]
+    if not available:
+        return cleaned_previous or HEADER_SUBTITLE_MESSAGES[0]
+    return random.choice(available)
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 HEADER_ICON_VARIANTS = {
     "dark": PROJECT_ROOT / "frontend" / "nightshift-header-dark.png",
@@ -51,7 +73,7 @@ class StatusRenderer:
         self._title_font = self._load_font(size=84, candidates=TITLE_FONT_CANDIDATES)
         subtitle_size = max(32, int(self._title_font.size * 0.45))
         self._subtitle_font = self._load_font(size=subtitle_size, candidates=SUBTITLE_FONT_CANDIDATES)
-        self._subtitle_text = "all day every day"
+        self._subtitle_text = pick_header_subtitle()
         self._subtitle_gap = max(8, self._subtitle_font.size // 4)
         self._body_font = self._load_font(size=46, candidates=BODY_FONT_CANDIDATES)
         logo_size = int(self._title_font.size * HEADER_ICON_BASE_SCALE * HEADER_ICON_ENLARGE_FACTOR)
@@ -83,6 +105,8 @@ class StatusRenderer:
         footer_space = self._footer_margin + self._footer_font.size
         footer_block_top = self.height - footer_space
         content_bottom = max(self._margin + self._body_font.size, footer_block_top - 10)
+
+        self._subtitle_text = pick_header_subtitle(self._subtitle_text)
 
         y = self._draw_header(
             canvas,
@@ -277,9 +301,7 @@ class StatusRenderer:
         text_y = y + max(0, (header_height - title_block_height) // 2)
         draw.text((text_x, text_y), title, font=self._title_font, fill=0x00)
         if subtitle_block and subtitle_font:
-            title_width = self._measure_text(title, font=self._title_font)
-            subtitle_width = self._measure_text(subtitle, font=subtitle_font)
-            aligned_subtitle_x = text_x + max(0, int(title_width - subtitle_width))
+            aligned_subtitle_x = text_x
             subtitle_y = text_y + self._title_font.size + self._subtitle_gap
             draw.text((aligned_subtitle_x, subtitle_y), subtitle, font=subtitle_font, fill=0x00)
         if logo:

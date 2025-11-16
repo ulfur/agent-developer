@@ -14,6 +14,8 @@ from .it8591 import DisplayUnavailable, IT8591Config, IT8591DisplayDriver
 from .renderer import StatusRenderer
 from log_utils import extract_stdout_preview
 
+SUBTITLE_REFRESH_INTERVAL = dt.timedelta(seconds=45)
+
 
 class TaskQueueDisplayManager(threading.Thread):
     """Async worker that keeps the IT8591 panel in sync with the queue."""
@@ -42,6 +44,7 @@ class TaskQueueDisplayManager(threading.Thread):
         self._renderer: StatusRenderer | None = None
         self._last_success: dt.datetime | None = None
         self._init_failed_at: dt.datetime | None = None
+        self._next_subtitle_refresh: dt.datetime | None = None
 
     def request_refresh(self, reason: str = "") -> None:
         """Queue a refresh request if the subsystem is enabled."""
@@ -74,6 +77,7 @@ class TaskQueueDisplayManager(threading.Thread):
             try:
                 _ = self._queue.get(timeout=2)
             except queue.Empty:
+                self._maybe_rotate_subtitle()
                 continue
             self._refresh_panel()
 
@@ -96,6 +100,7 @@ class TaskQueueDisplayManager(threading.Thread):
                 self._driver.height,
             )
             self._init_failed_at = None
+            self._schedule_next_subtitle_refresh()
             return True
         except DisplayUnavailable as exc:
             self.logger.warning("E-ink display unavailable: %s", exc)
@@ -130,6 +135,21 @@ class TaskQueueDisplayManager(threading.Thread):
             )
         except Exception as exc:  # pragma: no cover - hardware path
             self.logger.exception("Failed to push update to e-ink display: %s", exc)
+        finally:
+            self._schedule_next_subtitle_refresh()
+
+    def _schedule_next_subtitle_refresh(self) -> None:
+        self._next_subtitle_refresh = dt.datetime.utcnow() + SUBTITLE_REFRESH_INTERVAL
+
+    def _maybe_rotate_subtitle(self) -> None:
+        if not self._driver or not self._renderer:
+            return
+        if not self._next_subtitle_refresh:
+            return
+        if dt.datetime.utcnow() < self._next_subtitle_refresh:
+            return
+        self.logger.debug("Refreshing e-ink display to rotate header subtitle")
+        self._refresh_panel()
 
     def _collect_human_tasks(self) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         summary: Dict[str, Any] = {"blocking_count": 0, "status_counts": {}}

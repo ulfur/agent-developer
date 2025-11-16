@@ -12,8 +12,20 @@ These instructions apply to every prompt, regardless of which project is current
 ## Getting oriented
 - Start with the selected project’s own `context.md`/`agents.md` and only branch out to shared docs when they explicitly apply.
 - When you are working on Nightshift (`nightshift`), also review `the_project.txt` and the repo `README.md` so platform-wide expectations stay fresh.
+- Nightshift now maintains a supplemental planning file `roadmap_updates.md` (ignored by git). When a prompt targets Nightshift itself, read both ROADMAP.md and that file so new control-plane and hardware directives get reflected in your work.
 - Keep project-specific facts inside that project’s folder so guidance stays scoped. If you find general expectations that apply to everyone, update this shared file instead.
 - Summarize each attempt in `logs/progress.log`. Include the prompt intent, key edits, skipped verifications, and remaining questions so future operators inherit context.
+
+## Agent identity & platforms
+- Every device/cloud instance must pair with the nghtshft.ai control plane before touching repos. The backend writes `config/agent_identity.yml` after a successful `POST /register-agent`. Do not hand-edit this file; if it is missing or stale, stop and queue a Human Task so operators can re-pair the device.
+- The identity blob defines Agent ID, friendly name, repo/workspace permissions, PM tokens, Cloudflare hostname, and preferred ModelDriver. Honor those settings (e.g., never access repos outside the `allow` list even if the filesystem permits it).
+- Track which hardware form factor you are running on (E-ink Pi, Touchscreen Pi, or Cloud agent). Log hardware-specific blockers (battery, display firmware, GPU quotas, etc.) as Human Tasks so other operators can service the affected device without guessing.
+- Cloudflare tunnels are mandatory whenever the agent is reachable outside the LAN. If the tunnel heartbeat fails, log it in `logs/progress.log`, flip the dashboard chip to degraded, and only keep working if the prompt explicitly allows offline mode.
+
+## Control plane & PM sync
+- nghtshft.ai is the authoritative place for pairing devices, issuing tunnel credentials, and distributing secrets/PM tokens. When you notice mismatched config versus the control plane UI, capture the discrepancy in your log and escalate.
+- Monday.com is now a first-class integration: assigned items become prompts, status/comments sync bi-directionally, and Human Tasks are mirrored as Monday updates. When you close a blocker, ensure the Monday item reflects the same resolution (and vice versa).
+- Future Jira/Linear integrations will reuse the same mapping. Keep the integration daemon healthy (`scripts/pm_sync.py` logs to `logs/progress.log`); if it fails, raise a Human Task and pause any automation that depends on external status.
 
 ## Container runtime expectations
 - The default way to run Nightshift is now Docker Compose. `docker/backend.Dockerfile`, `docker/frontend.Dockerfile`, and `docker-compose.yml` define the backend + nginx services, both of which mount `/workspaces`.
@@ -28,6 +40,7 @@ These instructions apply to every prompt, regardless of which project is current
 - Keep the branch clean by the time you finish the attempt. If you leave uncommitted edits behind, the backend cannot clean up the branch and the next prompt will fail—commit/stash or document why the cleanup must be deferred and queue a follow-up task.
 - Mention the branch name in your `logs/progress.log` summary so humans can inspect it quickly (`git status` will show it as the current HEAD). When cleanup succeeds, the backend automatically switches back to `dev` and prunes the prompt branch locally.
 - Use `scripts/git_branch_smoke.py` whenever the git workflow acts suspicious (or before large migrations) to confirm the repo is clean and the automation can cut/delete branches safely. Pass `--execute` only when you intentionally want it to touch the tree.
+- Branch automation is currently being re-validated via prompt `2f4b09815f1044b9a1bb800bb9360bca`. If you notice any mismatch between the instructions above and `git_branching.py`'s behaviour, capture the exact console output and note it in both your response and `logs/progress.log` so we can close that investigation quickly.
 
 ## Execution hygiene
 - Run the smallest useful verification for the code you modify (tests, linters, or smoke scripts). If a check cannot run, explain why in both the log and your user-facing response.
@@ -42,6 +55,7 @@ These instructions apply to every prompt, regardless of which project is current
 - When you close out a task, drop a fresh prompt onto the queue that spells out the next chunk of work (or explicitly say "no follow-up needed"). The pipeline stays busy only if we keep feeding it.
 - Keep an eye on the “Queue Health” card (or `/api/health.metrics`). Status chips show how many prompts are `queued`/`running`, the “Oldest queued/running” tiles list the prompt IDs that have been waiting the longest, and the badges warn when wait times exceed 60 s (`Slow queue`) or runs last longer than 10 minutes (`Long runs`). If those badges appear or the oldest prompt IDs stop changing, treat the queue as stuck: inspect that prompt’s log, cancel/retry as needed, and only then add new work.
 - Codex now runs with `--search`, so when the prompt calls for research, use web search inside the Codex session and cite the sources you rely on in both the log and your final response.
+- Prompt `335722ec9e05482f943fa1cd1ab7f859` is queued to diagnose why prompts are currently processed/displayed in FILO order. When you enqueue or triage prompts, record the `queue_position` values from `/api/prompts` alongside timestamps in `logs/progress.log` so we have evidence showing whether the bug reproduces.
 
 ### Prompt queue checklist (do this every time you add work)
 1. Re-read `ROADMAP.md` and any plan docs for the active project so the new prompt references the latest priorities and explicitly instructs future agents to keep doing the same (e.g., “start by reading ROADMAP.md”).

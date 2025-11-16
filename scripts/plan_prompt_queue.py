@@ -156,6 +156,7 @@ class FilePromptQueue:
             "last_run_seconds": None,
             "last_finished_at": None,
             "human_task_id": None,
+            "reply_to_prompt_id": None,
             "server_restart_required": False,
             "server_restart_marked_at": None,
         }

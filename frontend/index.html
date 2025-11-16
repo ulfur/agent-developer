@@ -112,7 +112,8 @@
         }
       }
       @media (min-width: 960px) {
-        .main-layout--settings {
+        .main-layout--settings,
+        .main-layout--workspaces {
           height: auto;
         }
       }
@@ -204,7 +205,8 @@
         flex: 0 0 auto;
       }
 
-      .chat-card-human-task {
+      .chat-card-human-task,
+      .chat-card-prompt-reply {
         display: inline-flex;
         align-items: center;
         gap: 0.35rem;
@@ -213,7 +215,8 @@
         margin-top: 0.35rem;
       }
 
-      .chat-card-human-task .mdi {
+      .chat-card-human-task .mdi,
+      .chat-card-prompt-reply .mdi {
         font-size: 1rem;
       }
 
@@ -539,8 +542,52 @@
         font-size: 0.85rem;
       }
 
-      .queue-entry-index {
-        font-weight: 600;
+      .queue-entry-actions {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+      }
+
+      .queue-entry-action {
+        border: none;
+        background: rgba(99, 102, 241, 0.12);
+        color: var(--primary-color, #6366f1);
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        font-size: 0.85rem;
+        font-family: inherit;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.2s ease, color 0.2s ease;
+      }
+
+      .queue-entry-action:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+
+      .queue-entry-action--cancel {
+        background: rgba(248, 113, 113, 0.18);
+        color: #f87171;
+      }
+
+      .queue-entry-action--cancel:hover,
+      .queue-entry-action--cancel:focus-visible {
+        background: rgba(248, 113, 113, 0.32);
+      }
+
+      .queue-entry-action .mdi {
+        font-size: 1rem;
+      }
+
+      .queue-entry-action:hover,
+      .queue-entry-action:focus-visible {
+        background: rgba(99, 102, 241, 0.2);
+        outline: none;
       }
 
       .queue-entry-status {
@@ -577,7 +624,14 @@
         text-overflow: ellipsis;
       }
 
-      .queue-entry-human-task {
+      .queue-entry-subtitle {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      }
+
+      .queue-entry-human-task,
+      .queue-entry-prompt-reference {
         margin-top: 0.35rem;
         display: flex;
         align-items: center;
@@ -586,7 +640,8 @@
         color: var(--text-muted);
       }
 
-      .queue-entry-human-task .mdi {
+      .queue-entry-human-task .mdi,
+      .queue-entry-prompt-reference .mdi {
         font-size: 0.95rem;
       }
 
@@ -828,7 +883,8 @@
         margin-top: 0;
       }
 
-      .human-task-reply-banner {
+      .human-task-reply-banner,
+      .prompt-reply-banner {
         display: flex;
         align-items: center;
         gap: 0.5rem;
@@ -840,46 +896,26 @@
         margin-bottom: 0.75rem;
       }
 
-      .human-task-reply-banner__icon {
+      .human-task-reply-banner__icon,
+      .prompt-reply-banner__icon {
         font-size: 1rem;
         color: var(--primary-color, #6750a4);
       }
 
-      .human-task-reply-banner__text {
+      .human-task-reply-banner__text,
+      .prompt-reply-banner__text {
         flex: 1;
         font-size: 0.9rem;
       }
 
-      .human-task-reply-banner__text strong {
+      .human-task-reply-banner__text strong,
+      .prompt-reply-banner__text strong {
         font-weight: 600;
       }
 
-      .human-task-reply-banner__clear {
+      .human-task-reply-banner__clear,
+      .prompt-reply-banner__clear {
         flex-shrink: 0;
-      }
-
-      .codex-status {
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        gap: 0.2rem;
-      }
-
-      .codex-status__line {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
-      }
-
-      .codex-status__value {
-        font-weight: 600;
-        color: var(--text-primary);
-      }
-
-      .codex-status__error {
-        color: var(--v-theme-error, #de3730);
-        font-weight: 500;
       }
 
       .composer-actions {
@@ -1043,9 +1079,9 @@
       .global-header__text {
         display: flex;
         flex-direction: column;
-        align-items: flex-end;
+        align-items: flex-start;
         line-height: 1.2;
-        text-align: right;
+        text-align: left;
       }
 
       .global-header__home-link:focus-visible {
@@ -1279,6 +1315,7 @@
       }
 
       .chat-card-title__cancel,
+      .chat-card-title__reply,
       .chat-card-title__delete {
         flex-shrink: 0;
       }
@@ -1288,7 +1325,8 @@
           width: 100%;
         }
 
-        .chat-card-title__cancel {
+        .chat-card-title__cancel,
+        .chat-card-title__reply {
           margin-left: auto;
         }
       }
@@ -1583,12 +1621,30 @@
         padding-right: 0.35rem;
       }
 
-      .workspace-panel--settings .mobile-panel-controls {
+      .workspace-panel--page {
+        position: static;
+        max-height: none;
+      }
+
+      .workspace-panel--page .mobile-panel-controls {
         padding: 1rem 1.5rem 0;
       }
 
-      .workspace-panel--settings .workspace-panel__body {
+      .workspace-panel--page .workspace-panel__body {
         padding: 1rem 1.5rem 1.5rem;
+        flex: initial;
+      }
+
+      .workspace-panel--page .workspace-panel__section {
+        flex: initial;
+        min-height: auto;
+      }
+
+      .workspace-panel--page .workspace-panel__content {
+        flex: initial;
+        min-height: auto;
+        overflow: visible;
+        padding-right: 0;
       }
 
       .workspace-panel__footer {
@@ -1845,10 +1901,34 @@
             id: 'settings-log',
             target: '[data-tour-id=\"tour-operations-log\"]',
             title: 'Review the operations log',
-            description: 'The log at the bottom details recent operations so you can confirm what Nightshift has been doing.',
+            description: 'Use the log on the right to confirm what Nightshift has been doing without leaving Settings.',
+          },
+        ],
+        workspaces: [
+          {
+            id: 'workspaces-navigation',
+            target: '[data-tour-id=\"tour-home-link\"]',
+            title: 'Return to the dashboard',
+            description: 'The Nightshift logo takes you back to the Task Queue once you finish reviewing the registry.',
+          },
+          {
+            id: 'workspaces-search',
+            target: '[data-tour-id=\"tour-workspaces-search\"]',
+            title: 'Filter the registry',
+            description: 'Search by workspace name, runtime, or owner to zero in on the environments you need.',
+          },
+          {
+            id: 'workspaces-details',
+            target: '[data-tour-id=\"tour-workspaces-entry\"]',
+            title: 'Inspect runtime details',
+            description: 'Each card surfaces runtimes, launch links, contacts, and shortcuts to audit human tasks.',
           },
         ],
       };
+      const GUIDED_TOUR_VIEW_SEQUENCE = ['queue', 'settings', 'workspaces'];
+      const GUIDED_TOUR_AVAILABLE_VIEWS = GUIDED_TOUR_VIEW_SEQUENCE.filter(
+        (view) => (GUIDED_TOUR_FLOWS[view] || []).length > 0
+      );
       const HEALTH_STATUS_COLORS = {
         healthy: 'success',
         degraded: 'warning',
@@ -1883,6 +1963,14 @@
         { status: 'failed', label: 'Failed', color: 'error', always: false },
         { status: 'canceled', label: 'Canceled', color: 'grey-darken-1', always: false },
       ];
+      const QUEUE_STATUS_SORT_ORDER = {
+        queued: 0,
+        running: 1,
+        [PROMPT_STATUS_SERVER_RESTARTING]: 2,
+        completed: 3,
+        failed: 4,
+        canceled: 5,
+      };
 
       const loadWorkspacePanelPreference = () => {
         if (typeof window === 'undefined' || !window.localStorage) {
@@ -1982,6 +2070,28 @@
           },
         },
       };
+      const HEADER_SUBTITLE_MESSAGES = [
+        'all day every day',
+        'the code writes itself',
+        'you think, code happens',
+        'commit, push, repeat',
+        'deploys before sunrise',
+        'sleep is for staging',
+        'bugs fear this place',
+        'runtime errors take PTO',
+      ];
+      const HEADER_SUBTITLE_ROTATION_MS = 15000;
+      const pickHeaderSubtitle = (previous = '') => {
+        if (!Array.isArray(HEADER_SUBTITLE_MESSAGES) || HEADER_SUBTITLE_MESSAGES.length === 0) {
+          return '';
+        }
+        const pool = HEADER_SUBTITLE_MESSAGES.filter((message) => message !== previous);
+        if (pool.length === 0) {
+          return previous || HEADER_SUBTITLE_MESSAGES[0];
+        }
+        const index = Math.floor(Math.random() * pool.length);
+        return pool[index];
+      };
 
       const createApiClient = (getToken, onUnauthorized) => {
         return async (path, options = {}) => {
@@ -2048,6 +2158,11 @@
             component: { template: '<div />' },
           },
           {
+            path: '/workspaces',
+            name: 'workspaces',
+            component: { template: '<div />' },
+          },
+          {
             path: '/:promptId?',
             name: 'queue',
             component: { template: '<div />' },
@@ -2079,6 +2194,7 @@
           const humanTasksRevision = ref(null);
           const humanTasksMenuOpen = ref(false);
           const humanTaskReplyTarget = ref(null);
+          const promptReplyTarget = ref(null);
           const expandedHumanTaskDescriptions = ref({});
           const retrying = ref(false);
           const canceling = ref(false);
@@ -2105,6 +2221,7 @@
           const reconnectAttempts = ref(0);
           const theme = useTheme();
           const themeMode = ref('dark');
+          const headerSubtitle = ref(pickHeaderSubtitle());
           const headerIconSrc = computed(() => HEADER_ICON_SOURCES[themeMode.value] || HEADER_ICON_SOURCES.dark);
           const route = useRoute();
           const router = useRouter();
@@ -2124,6 +2241,7 @@
           let reconnectTimer = null;
           let logRefreshTimer = null;
           let elapsedTimer = null;
+          let subtitleRotationTimer = null;
           let manualRealtimeClose = false;
           const authToken = ref('');
           const currentUser = ref(null);
@@ -2133,6 +2251,15 @@
           const loginError = ref('');
           const loginLoading = ref(false);
           const activeView = ref('queue');
+          const resolveViewFromRoute = (name) => {
+            if (name === 'settings') {
+              return 'settings';
+            }
+            if (name === 'workspaces') {
+              return 'workspaces';
+            }
+            return 'queue';
+          };
           const passwordForm = reactive({
             current: '',
             newValue: '',
@@ -2153,6 +2280,9 @@
           const isAuthenticated = computed(() => Boolean(authToken.value));
           const guidedTourActive = ref(false);
           const guidedTourStepIndex = ref(0);
+          const guidedTourViewOrder = ref([]);
+          const guidedTourViewIndex = ref(0);
+          const guidedTourPendingStepIndex = ref(null);
           const guidedTourHighlightRect = ref(null);
           const guidedTourTargetMissing = ref(false);
           const guidedTourSteps = computed(() => GUIDED_TOUR_FLOWS[activeView.value] || []);
@@ -2161,11 +2291,25 @@
           const guidedTourStepNumber = computed(() => guidedTourStepIndex.value + 1);
           const guidedTourTotalSteps = computed(() => guidedTourSteps.value.length);
           const isGuidedTourLastStep = computed(() => guidedTourStepNumber.value >= guidedTourTotalSteps.value);
+          const hasGuidedTourNextView = computed(() => guidedTourViewIndex.value < guidedTourViewOrder.value.length - 1);
+          const isGuidedTourLastView = computed(() => !hasGuidedTourNextView.value);
+          const isGuidedTourAtFirstOverallStep = computed(
+            () => guidedTourViewIndex.value === 0 && guidedTourStepIndex.value === 0
+          );
+          const guidedTourPrimaryButtonLabel = computed(() => {
+            if (!guidedTourActive.value) {
+              return 'Next';
+            }
+            if (isGuidedTourLastStep.value) {
+              return hasGuidedTourNextView.value ? 'Next page' : 'Finish tour';
+            }
+            return 'Next';
+          });
           const canStartGuidedTour = computed(
             () =>
               isAuthenticated.value &&
               !isMobileLayout.value &&
-              guidedTourSteps.value.length > 0
+              GUIDED_TOUR_AVAILABLE_VIEWS.length > 0
           );
           const guidedTourHighlightStyle = computed(() => {
             if (!guidedTourVisible.value || !guidedTourHighlightRect.value) {
@@ -2199,6 +2343,9 @@
           };
           const openSettingsView = () => {
             router.push({ name: 'settings' }).catch(() => {});
+          };
+          const openWorkspacesView = () => {
+            router.push({ name: 'workspaces' }).catch(() => {});
           };
           const returnToQueueView = () => {
             resetSettingsState();
@@ -2245,18 +2392,6 @@
             }
           };
 
-          const showWorkspacePanel = () => {
-            if (isMobileLayout.value) {
-              activeMobilePanel.value = 'workspaces';
-              return;
-            }
-            workspacePanelCollapsed.value = false;
-          };
-
-          const toggleWorkspacePanel = () => {
-            workspacePanelCollapsed.value = !workspacePanelCollapsed.value;
-          };
-
           const toggleMobileComposer = () => {
             if (!isMobileLayout.value) {
               return;
@@ -2267,11 +2402,12 @@
           watch(
             () => route.name,
             (name, previous) => {
-              const nextView = name === 'settings' ? 'settings' : 'queue';
+              const nextView = resolveViewFromRoute(name);
+              const previousView = resolveViewFromRoute(previous);
               if (activeView.value !== nextView) {
                 activeView.value = nextView;
               }
-              if (previous === 'settings' && nextView === 'queue') {
+              if (previousView === 'settings' && nextView !== 'settings') {
                 resetSettingsState();
               }
             },
@@ -2332,6 +2468,12 @@
             }
           });
 
+          watch(promptReplyTarget, (target) => {
+            if (target && isMobileLayout.value) {
+              mobileComposerExpanded.value = true;
+            }
+          });
+
           watch(promptText, (value) => {
             if (value && isMobileLayout.value) {
               mobileComposerExpanded.value = true;
@@ -2354,9 +2496,31 @@
             }
           );
 
-          watch(activeView, () => {
+          watch(activeView, (view) => {
             if (guidedTourActive.value) {
-              closeGuidedTour();
+              if (!guidedTourViewOrder.value.length) {
+                closeGuidedTour();
+                return;
+              }
+              const plannedIndex = guidedTourViewOrder.value.indexOf(view);
+              if (plannedIndex === -1) {
+                closeGuidedTour();
+                return;
+              }
+              guidedTourViewIndex.value = plannedIndex;
+              const requestedStepIndex = guidedTourPendingStepIndex.value;
+              guidedTourPendingStepIndex.value = null;
+              const stepsForView = GUIDED_TOUR_FLOWS[view] || [];
+              if (typeof requestedStepIndex === 'number' && requestedStepIndex >= 0) {
+                guidedTourStepIndex.value = Math.min(
+                  requestedStepIndex,
+                  Math.max(stepsForView.length - 1, 0)
+                );
+              } else {
+                guidedTourStepIndex.value = 0;
+              }
+              guidedTourTargetMissing.value = false;
+              refreshGuidedTourHighlight();
               return;
             }
             refreshGuidedTourHighlight();
@@ -3077,7 +3241,7 @@
             }
             const index = queue.value.findIndex((item) => item.prompt_id === entry.prompt_id);
             if (index === -1) {
-              queue.value.unshift({ ...entry });
+              queue.value.push({ ...entry });
             } else {
               Object.assign(queue.value[index], entry);
             }
@@ -3107,14 +3271,48 @@
           const isFailedStatus = (status) => (status || '').toLowerCase() === 'failed';
           const isRunningStatus = (status) => (status || '').toLowerCase() === 'running';
           const EDITABLE_PROMPT_STATUSES = new Set(['queued', 'failed', 'completed', 'canceled']);
+          const REPLYABLE_PROMPT_STATUSES = new Set(['completed', 'failed']);
 
           const attemptLogs = computed(() => {
-            if (!selectedPrompt.value?.attempt_logs?.length) {
+            const prompt = selectedPrompt.value;
+            const logs = prompt?.attempt_logs;
+            if (!Array.isArray(logs) || !logs.length) {
               return [];
             }
-            return [...selectedPrompt.value.attempt_logs].sort((a, b) => {
-              return new Date(a.received_at || 0) - new Date(b.received_at || 0);
-            });
+            const parseAttemptTimestamp = (attempt) => {
+              const sources = [attempt?.received_at, attempt?.completed_at];
+              for (const value of sources) {
+                if (!value) {
+                  continue;
+                }
+                const parsed = Date.parse(value);
+                if (!Number.isNaN(parsed)) {
+                  return parsed;
+                }
+              }
+              return null;
+            };
+            return logs
+              .map((attempt, index) => ({
+                attempt,
+                index,
+                timestamp: parseAttemptTimestamp(attempt),
+              }))
+              .sort((a, b) => {
+                const tsA = a.timestamp;
+                const tsB = b.timestamp;
+                if (tsA != null && tsB != null && tsA !== tsB) {
+                  return tsA - tsB;
+                }
+                if (tsA == null && tsB != null) {
+                  return 1;
+                }
+                if (tsA != null && tsB == null) {
+                  return -1;
+                }
+                return a.index - b.index;
+              })
+              .map((item) => item.attempt);
           });
 
           const globalContext = computed(() => selectedPrompt.value?.agents_context || '');
@@ -3233,7 +3431,7 @@
             const lookup = projectLookup.value;
             const focusProjectId = activeProjectId.value;
             const nowMs = nowTick.value;
-            return queue.value
+            const entries = queue.value
               .map((item, index) => {
                 const status = (item.status || '').toLowerCase();
                 const isCompleted = status === 'completed';
@@ -3280,9 +3478,30 @@
                   createdDisplay: formatQueueTimestamp(item.created_at),
                   runtimeDisplay: runtimeSeconds != null ? formatQueueDuration(runtimeSeconds) : null,
                   detailLine: detail,
+                  orderIndex: index,
                 };
               })
               .filter(Boolean);
+            entries.sort((a, b) => {
+              const statusRankA = QUEUE_STATUS_SORT_ORDER[(a.status || '').toLowerCase()] ?? 99;
+              const statusRankB = QUEUE_STATUS_SORT_ORDER[(b.status || '').toLowerCase()] ?? 99;
+              if (statusRankA !== statusRankB) {
+                return statusRankA - statusRankB;
+              }
+              const positionA =
+                typeof a.queueIndex === 'number' && Number.isFinite(a.queueIndex)
+                  ? a.queueIndex
+                  : Number.MAX_SAFE_INTEGER;
+              const positionB =
+                typeof b.queueIndex === 'number' && Number.isFinite(b.queueIndex)
+                  ? b.queueIndex
+                  : Number.MAX_SAFE_INTEGER;
+              if (positionA !== positionB) {
+                return positionA - positionB;
+              }
+              return (a.orderIndex ?? 0) - (b.orderIndex ?? 0);
+            });
+            return entries.map(({ orderIndex, ...rest }) => rest);
           });
 
           watch(
@@ -3376,6 +3595,53 @@
             }
             return 'Human task';
           };
+
+          const resolvePromptProjectDisplay = (prompt) => {
+            if (!prompt) {
+              return '';
+            }
+            const project = prompt.project;
+            if (project && typeof project === 'object') {
+              return project.name || project.id || '';
+            }
+            if (typeof project === 'string') {
+              return project;
+            }
+            return prompt.project_id || '';
+          };
+
+          const formatPromptReplyReference = (prompt) => {
+            if (!prompt) {
+              return '';
+            }
+            const referenceId = normalizePromptId(
+              prompt.prompt_id || prompt.reply_to_prompt_id || prompt.reference_prompt_id
+            );
+            if (referenceId) {
+              return `Task ${referenceId}`;
+            }
+            return 'Task';
+          };
+
+          const canCancelPrompt = (prompt) => {
+            if (!prompt || !prompt.prompt_id) {
+              return false;
+            }
+            const status = (prompt.status || '').toLowerCase();
+            if (status === 'queued') {
+              return true;
+            }
+            return isRunningStatus(status);
+          };
+
+          const canReplyToPrompt = (prompt) => {
+            if (!prompt || !prompt.prompt_id) {
+              return false;
+            }
+            return REPLYABLE_PROMPT_STATUSES.has((prompt.status || '').toLowerCase());
+          };
+
+          const canReplyToSelectedPrompt = computed(() => canReplyToPrompt(selectedPrompt.value));
 
           const blockingHumanTaskCount = computed(() => {
             const summary = humanTasksSummary.value || {};
@@ -3597,31 +3863,6 @@
             return `${matches} match${matches === 1 ? '' : 'es'} · ${projectOptions.value.length} total`;
           });
 
-          const normalizeCodexLimitLine = (limit, fallbackLabel) => {
-            if (!limit || typeof limit !== 'object') {
-              return null;
-            }
-            const label = String(limit.label || '').trim() || fallbackLabel;
-            const value = String(limit.value || '').trim();
-            return { label, value };
-          };
-
-          const codexStatusInfo = computed(() => {
-            const status = health.value?.codex_status;
-            if (!status || typeof status !== 'object') {
-              return null;
-            }
-            const result = {
-              error: typeof status.error === 'string' ? status.error : '',
-              fiveHour: normalizeCodexLimitLine(status.five_hour, '5h limit'),
-              weekly: normalizeCodexLimitLine(status.weekly, 'Weekly limit'),
-            };
-            if (!result.error && !result.fiveHour && !result.weekly) {
-              return null;
-            }
-            return result;
-          });
-
           const canEditSelectedPrompt = computed(() => {
             if (!selectedPrompt.value) {
               return false;
@@ -3630,16 +3871,7 @@
             return EDITABLE_PROMPT_STATUSES.has(status);
           });
 
-          const canCancelSelectedPrompt = computed(() => {
-            if (!selectedPrompt.value) {
-              return false;
-            }
-            const status = (selectedPrompt.value.status || '').toLowerCase();
-            if (status === 'queued') {
-              return true;
-            }
-            return isRunningStatus(status);
-          });
+          const canCancelSelectedPrompt = computed(() => canCancelPrompt(selectedPrompt.value));
           const canRestartSelectedPrompt = computed(() => {
             if (!selectedPrompt.value) {
               return false;
@@ -3702,13 +3934,37 @@
             nextTick(() => updateGuidedTourHighlightRect());
           };
 
-          const startGuidedTour = () => {
-            if (!canStartGuidedTour.value || !guidedTourSteps.value.length) {
+          const navigateToGuidedTourView = (view) => {
+            if (!view || view === activeView.value) {
+              refreshGuidedTourHighlight();
               return;
             }
+            if (view === 'settings') {
+              openSettingsView();
+              return;
+            }
+            if (view === 'workspaces') {
+              openWorkspacesView();
+              return;
+            }
+            returnToQueueView();
+          };
+
+          const startGuidedTour = () => {
+            if (!canStartGuidedTour.value || !GUIDED_TOUR_AVAILABLE_VIEWS.length) {
+              return;
+            }
+            guidedTourViewOrder.value = GUIDED_TOUR_AVAILABLE_VIEWS.slice();
+            guidedTourViewIndex.value = 0;
+            guidedTourPendingStepIndex.value = 0;
             guidedTourStepIndex.value = 0;
             guidedTourActive.value = true;
             guidedTourTargetMissing.value = false;
+            const firstView = guidedTourViewOrder.value[0];
+            if (firstView && activeView.value !== firstView) {
+              navigateToGuidedTourView(firstView);
+              return;
+            }
             refreshGuidedTourHighlight();
           };
 
@@ -3716,18 +3972,51 @@
             guidedTourActive.value = false;
             guidedTourHighlightRect.value = null;
             guidedTourTargetMissing.value = false;
+            guidedTourViewOrder.value = [];
+            guidedTourViewIndex.value = 0;
+            guidedTourPendingStepIndex.value = null;
           };
 
           const previousGuidedTourStep = () => {
             if (guidedTourStepIndex.value === 0) {
+              if (guidedTourViewIndex.value === 0) {
+                return;
+              }
+              const previousIndex = Math.max(0, guidedTourViewIndex.value - 1);
+              const previousView = guidedTourViewOrder.value[previousIndex];
+              const previousSteps = (GUIDED_TOUR_FLOWS[previousView] || []).length;
+              guidedTourViewIndex.value = previousIndex;
+              guidedTourPendingStepIndex.value = Math.max(previousSteps - 1, 0);
+              guidedTourTargetMissing.value = false;
+              navigateToGuidedTourView(previousView);
               return;
             }
             guidedTourStepIndex.value -= 1;
             refreshGuidedTourHighlight();
           };
 
+          const advanceGuidedTourToNextView = () => {
+            if (!hasGuidedTourNextView.value) {
+              closeGuidedTour();
+              return;
+            }
+            const nextIndex = Math.min(
+              guidedTourViewIndex.value + 1,
+              Math.max(0, guidedTourViewOrder.value.length - 1)
+            );
+            guidedTourViewIndex.value = nextIndex;
+            guidedTourPendingStepIndex.value = 0;
+            guidedTourTargetMissing.value = false;
+            const nextView = guidedTourViewOrder.value[nextIndex];
+            navigateToGuidedTourView(nextView);
+          };
+
           const advanceGuidedTour = () => {
             if (isGuidedTourLastStep.value) {
+              if (hasGuidedTourNextView.value) {
+                advanceGuidedTourToNextView();
+                return;
+              }
               closeGuidedTour();
               return;
             }
@@ -3878,17 +4167,18 @@
                 logLoading.value = false;
                 activeView.value = 'queue';
                 resetSettingsState();
-              humanTasks.value = [];
-              humanTasksSummary.value = {};
-              humanTasksRevision.value = null;
-              humanTasksError.value = '';
-              humanTasksLoading.value = false;
-              humanTaskReplyTarget.value = null;
-              expandedHumanTaskDescriptions.value = {};
-            }
-          },
-          { immediate: true }
-        );
+                humanTasks.value = [];
+                humanTasksSummary.value = {};
+                humanTasksRevision.value = null;
+                humanTasksError.value = '';
+                humanTasksLoading.value = false;
+                humanTaskReplyTarget.value = null;
+                promptReplyTarget.value = null;
+                expandedHumanTaskDescriptions.value = {};
+              }
+            },
+            { immediate: true }
+          );
 
           watch(
             () => [isAuthenticated.value, route.name, route.params.promptId],
@@ -4102,9 +4392,11 @@
               return;
             }
             humanTaskReplyTarget.value = { ...task };
+            promptReplyTarget.value = null;
             humanTasksMenuOpen.value = false;
             if (isMobileLayout.value) {
               activeMobilePanel.value = 'queue';
+              mobileComposerExpanded.value = true;
             }
           };
 
@@ -4126,6 +4418,30 @@
 
           const clearHumanTaskReply = () => {
             humanTaskReplyTarget.value = null;
+          };
+
+          const startPromptReply = (prompt) => {
+            if (!isAuthenticated.value || !prompt || !prompt.prompt_id || !canReplyToPrompt(prompt)) {
+              return;
+            }
+            const normalizedId = normalizePromptId(prompt.prompt_id);
+            if (!normalizedId) {
+              return;
+            }
+            promptReplyTarget.value = {
+              prompt_id: normalizedId,
+              projectDisplay: resolvePromptProjectDisplay(prompt),
+            };
+            humanTaskReplyTarget.value = null;
+            humanTasksMenuOpen.value = false;
+            if (isMobileLayout.value) {
+              activeMobilePanel.value = 'queue';
+              mobileComposerExpanded.value = true;
+            }
+          };
+
+          const clearPromptReply = () => {
+            promptReplyTarget.value = null;
           };
 
           watch(
@@ -4318,6 +4634,9 @@
               if (humanTaskReplyTarget.value?.task_id) {
                 payload.human_task_id = humanTaskReplyTarget.value.task_id;
               }
+              if (promptReplyTarget.value?.prompt_id) {
+                payload.reply_to_prompt_id = promptReplyTarget.value.prompt_id;
+              }
               const response = await api('/api/prompts', {
                 method: 'POST',
                 body: JSON.stringify(payload),
@@ -4325,6 +4644,9 @@
               promptText.value = '';
               if (humanTaskReplyTarget.value) {
                 humanTaskReplyTarget.value = null;
+              }
+              if (promptReplyTarget.value) {
+                promptReplyTarget.value = null;
               }
               if (response?.prompt_id) {
                 await selectPrompt({ prompt_id: response.prompt_id });
@@ -4425,14 +4747,14 @@
             await queuePromptRetry(restarting, 'Unable to restart prompt');
           };
 
-          const performCancelAction = async () => {
-            if (!isAuthenticated.value || !selectedPrompt.value || !canCancelSelectedPrompt.value) {
+          const performCancelAction = async (targetPrompt = selectedPrompt.value) => {
+            if (!isAuthenticated.value || canceling.value) {
               return;
             }
-            if (canceling.value) {
+            if (!targetPrompt || !targetPrompt.prompt_id || !canCancelPrompt(targetPrompt)) {
               return;
             }
-            const status = (selectedPrompt.value.status || '').toLowerCase();
+            const status = (targetPrompt.status || '').toLowerCase();
             if (status === 'queued') {
               const confirmed =
                 typeof window === 'undefined' ? true : window.confirm('Cancel this queued prompt?');
@@ -4441,7 +4763,7 @@
               }
             }
             canceling.value = true;
-            const promptId = selectedPrompt.value.prompt_id;
+            const promptId = targetPrompt.prompt_id;
             try {
               if (status === 'queued') {
                 await api(`/api/prompts/${promptId}`, { method: 'DELETE' });
@@ -4451,8 +4773,10 @@
                   refreshLocalQueueStatusBuckets();
                 }
                 clearStreamState(promptId);
-                selectedPrompt.value = null;
-                router.replace({ name: 'queue' }).catch(() => {});
+                if (selectedPrompt.value?.prompt_id === promptId) {
+                  selectedPrompt.value = null;
+                  router.replace({ name: 'queue' }).catch(() => {});
+                }
               } else {
                 await api(`/api/prompts/${promptId}/cancel`, {
                   method: 'POST',
@@ -4471,6 +4795,7 @@
           };
 
           const cancelSelectedPrompt = () => performCancelAction();
+          const cancelQueueEntry = (prompt) => performCancelAction(prompt);
 
           const clearEditPromptState = () => {
             editPromptDialogVisible.value = false;
@@ -4666,8 +4991,26 @@
             applyTheme(next);
           };
 
+          const stopSubtitleRotation = () => {
+            if (subtitleRotationTimer) {
+              clearInterval(subtitleRotationTimer);
+              subtitleRotationTimer = null;
+            }
+          };
+
+          const startSubtitleRotation = () => {
+            if (!Array.isArray(HEADER_SUBTITLE_MESSAGES) || HEADER_SUBTITLE_MESSAGES.length <= 1) {
+              return;
+            }
+            stopSubtitleRotation();
+            subtitleRotationTimer = setInterval(() => {
+              headerSubtitle.value = pickHeaderSubtitle(headerSubtitle.value);
+            }, HEADER_SUBTITLE_ROTATION_MS);
+          };
+
           onMounted(async () => {
             initTheme();
+            startSubtitleRotation();
             if (!elapsedTimer) {
               elapsedTimer = setInterval(() => {
                 nowTick.value = Date.now();
@@ -4702,6 +5045,7 @@
           onUnmounted(() => {
             disconnectRealtime({ manual: true });
             stopLogRefresh();
+            stopSubtitleRotation();
             if (elapsedTimer) {
               clearInterval(elapsedTimer);
               elapsedTimer = null;
@@ -4743,7 +5087,6 @@
             refreshEnvironments,
             getHealthStatusColor,
             getLifecycleStatusColor,
-            codexStatusInfo,
             humanTaskEntries,
             humanTasksLoading,
             clearHumanTasksLoading,
@@ -4753,6 +5096,7 @@
             humanTasksMenuLabel,
             humanTasksMenuOpen,
             humanTaskReplyTarget,
+            promptReplyTarget,
             toggleHumanTaskDescription,
             isHumanTaskDescriptionExpanded,
             blockingHumanTaskCount,
@@ -4763,6 +5107,8 @@
             startHumanTaskReply,
             reviewProjectHumanTasks,
             clearHumanTaskReply,
+            startPromptReply,
+            clearPromptReply,
             isClearingHumanTask,
             retrying,
             canceling,
@@ -4771,9 +5117,13 @@
             submitPrompt,
             selectPrompt,
             retryPrompt,
+            canCancelPrompt,
             canCancelSelectedPrompt,
             cancelSelectedPrompt,
+            cancelQueueEntry,
             restartSelectedPrompt,
+            canReplyToPrompt,
+            canReplyToSelectedPrompt,
             copyToClipboard,
             attemptLogs,
             attemptKey,
@@ -4786,12 +5136,11 @@
             liveAttemptDurationSeconds,
             activeView,
             openSettingsView,
+            openWorkspacesView,
             returnToQueueView,
             goHome,
             showQueuePanel,
             showThreadPanel,
-            showWorkspacePanel,
-            toggleWorkspacePanel,
             toggleMobileComposer,
             startGuidedTour,
             closeGuidedTour,
@@ -4803,6 +5152,8 @@
             guidedTourTotalSteps,
             guidedTourCurrentStep,
             guidedTourTargetMissing,
+            guidedTourPrimaryButtonLabel,
+            isGuidedTourAtFirstOverallStep,
             isGuidedTourLastStep,
             canStartGuidedTour,
             passwordForm,
@@ -4817,6 +5168,7 @@
             changePassword,
             fetchSshKeys,
             themeMode,
+            headerSubtitle,
             headerIconSrc,
             toggleTheme,
             chatThreadRef,
@@ -4826,6 +5178,7 @@
             formatStatus,
             formatQueueBadgeCount,
             formatHumanTaskReference,
+            formatPromptReplyReference,
             handleComposerKeydown,
             isAuthenticated,
             loginEmail,
@@ -4907,7 +5260,7 @@
                       />
                       <div class="global-header__text">
                         <span class="global-header__title">Nightshift</span>
-                        <span class="global-header__subtitle">all day every day</span>
+                        <span class="global-header__subtitle">{{ headerSubtitle }}</span>
                       </div>
                     </button>
                     <v-btn
@@ -5131,6 +5484,12 @@
                       </template>
                       <v-card class="user-menu-card" elevation="8">
                         <v-list density="compact">
+                          <v-list-item class="workspaces-menu-item" @click="openWorkspacesView">
+                            <template #prepend>
+                              <span class="user-menu-icon mdi mdi-briefcase-outline" aria-hidden="true"></span>
+                            </template>
+                            <v-list-item-title>Workspaces</v-list-item-title>
+                          </v-list-item>
                           <v-list-item class="settings-menu-item" @click="openSettingsView">
                             <template #prepend>
                               <span class="user-menu-icon mdi mdi-cog" aria-hidden="true"></span>
@@ -5403,264 +5762,7 @@
                       </v-card-text>
                     </v-card>
                   </v-col>
-                  <v-col
-                    v-if="isAuthenticated && (!isMobileLayout || activeMobilePanel === 'workspaces')"
-                    cols="12"
-                    md="8"
-                    lg="8"
-                    class="workspace-column d-flex flex-column"
-                  >
-                    <v-card elevation="0" class="panel-card workspace-panel workspace-panel--settings">
-                      <v-card-title class="workspace-panel__title">
-                        <div>
-                          <div class="text-subtitle-1 font-weight-medium">Workspace overview</div>
-                          <div class="workspace-panel__summary">
-                            Review workspace runtimes without leaving Settings.
-                          </div>
-                        </div>
-                      </v-card-title>
-                      <v-divider />
-                      <div v-if="isMobileLayout" class="mobile-panel-controls">
-                        <v-btn
-                          variant="text"
-                          size="small"
-                          prepend-icon="mdi-format-list-bulleted"
-                          @click="showQueuePanel"
-                        >
-                          Back to queue
-                        </v-btn>
-                        <v-btn
-                          variant="text"
-                          size="small"
-                          prepend-icon="mdi-forum"
-                          :disabled="!selectedPrompt"
-                          @click="showThreadPanel"
-                        >
-                          View task thread
-                        </v-btn>
-                      </div>
-                      <div class="workspace-panel__body">
-                          <div class="workspace-panel__section">
-                            <div class="workspace-panel__section-header">
-                              <div>
-                                <div class="text-subtitle-2 font-weight-medium">Workspaces</div>
-                                <div class="workspace-panel__summary">{{ projectDirectorySummary }}</div>
-                              </div>
-                              <v-text-field
-                                v-model="projectSearch"
-                                variant="outlined"
-                                density="compact"
-                                hide-details
-                                prepend-inner-icon="mdi-magnify"
-                                placeholder="Search workspaces"
-                              />
-                            </div>
-                            <div class="workspace-panel__content">
-                              <v-alert
-                                v-if="environmentError"
-                                type="error"
-                                variant="tonal"
-                                density="comfortable"
-                                border="start"
-                                class="mb-4"
-                              >
-                                {{ environmentError }}
-                              </v-alert>
-                              <div v-if="!projectDirectoryEntries.length" class="text-body-2 text-medium-emphasis">
-                                No workspaces match your search.
-                              </div>
-                              <div v-else class="workspace-directory">
-                                <div
-                                  v-for="workspace in projectDirectoryEntries"
-                                  :key="workspace.id"
-                                  class="workspace-directory__item"
-                                >
-                                  <div class="workspace-directory__header">
-                                    <div>
-                                      <div class="workspace-directory__name">{{ workspace.name || workspace.id }}</div>
-                                      <div class="workspace-directory__description">
-                                        {{ workspace.description || 'No description available.' }}
-                                      </div>
-                                    </div>
-                                    <div class="workspace-directory__actions">
-                                      <v-chip size="small" label variant="tonal" color="primary">
-                                        Runtimes · {{ workspace.environmentCount }}
-                                      </v-chip>
-                                      <v-chip
-                                        v-if="workspace.blockingTasks"
-                                        size="small"
-                                        label
-                                        variant="tonal"
-                                        color="error"
-                                      >
-                                        Blocking · {{ workspace.blockingTasks }}
-                                      </v-chip>
-                                      <v-chip
-                                        v-else-if="workspace.openTasks"
-                                        size="small"
-                                        label
-                                        variant="tonal"
-                                        color="warning"
-                                      >
-                                        Human tasks · {{ workspace.openTasks }}
-                                      </v-chip>
-                                      <v-btn
-                                        v-if="workspace.launch_url"
-                                        :href="workspace.launch_url"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        size="small"
-                                        icon="mdi-open-in-new"
-                                        variant="text"
-                                        :title="'Open ' + (workspace.name || workspace.id) + ' workspace link'"
-                                      ></v-btn>
-                                    </div>
-                                  </div>
-                                  <div class="workspace-directory__meta">
-                                    <div class="workspace-directory__meta-item" v-if="workspace.runtimeSummary">
-                                      <span>Runtimes</span>
-                                      <span>{{ workspace.runtimeSummary }}</span>
-                                    </div>
-                                    <div class="workspace-directory__meta-item" v-if="workspace.primaryContact">
-                                      <span>Contact</span>
-                                      <span>{{ workspace.primaryContact }}</span>
-                                    </div>
-                                    <div class="workspace-directory__meta-item" v-if="workspace.sourceSummary">
-                                      <span>Sources</span>
-                                      <span>{{ workspace.sourceSummary }}</span>
-                                    </div>
-                                  </div>
-                                  <div class="workspace-directory__environments">
-                                    <div
-                                      v-if="workspace.environments && workspace.environments.length"
-                                      class="workspace-environment-list"
-                                    >
-                                      <div
-                                        v-for="environment in workspace.environments"
-                                        :key="environment.id"
-                                        class="workspace-environment"
-                                      >
-                                        <div class="workspace-environment__header">
-                                          <div>
-                                            <div class="workspace-environment__name">{{ environment.name }}</div>
-                                            <div class="workspace-environment__subline">
-                                              {{ formatStatus(environment.lifecycleState) }} ·
-                                              {{ formatStatus(environment.healthStatus) }}
-                                              <span v-if="environment.hostDisplay">· {{ environment.hostDisplay }}</span>
-                                            </div>
-                                          </div>
-                                          <div class="workspace-environment__badges">
-                                            <v-chip
-                                              size="small"
-                                              label
-                                              variant="tonal"
-                                              :color="getHealthStatusColor(environment.healthStatus)"
-                                            >
-                                              Health · {{ formatStatus(environment.healthStatus) }}
-                                            </v-chip>
-                                            <v-chip
-                                              size="small"
-                                              label
-                                              variant="tonal"
-                                              :color="getLifecycleStatusColor(environment.lifecycleState)"
-                                            >
-                                              Lifecycle · {{ formatStatus(environment.lifecycleState) }}
-                                            </v-chip>
-                                            <v-chip
-                                              v-if="environment.blockingTasks"
-                                              size="small"
-                                              label
-                                              variant="tonal"
-                                              color="error"
-                                            >
-                                              Blocking · {{ environment.blockingTasks }}
-                                            </v-chip>
-                                            <v-chip
-                                              v-else-if="environment.openTasks"
-                                              size="small"
-                                              label
-                                              variant="tonal"
-                                              color="warning"
-                                            >
-                                              Human tasks · {{ environment.openTasks }}
-                                            </v-chip>
-                                          </div>
-                                        </div>
-                                        <div
-                                          class="workspace-environment__links"
-                                          v-if="environment.quickLinks && environment.quickLinks.length"
-                                        >
-                                          <v-btn
-                                            v-for="link in environment.quickLinks"
-                                            :key="link.url"
-                                            :href="link.url"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            variant="tonal"
-                                            size="small"
-                                            prepend-icon="mdi-launch"
-                                          >
-                                            {{ link.label }}
-                                          </v-btn>
-                                        </div>
-                                        <div class="workspace-environment__actions">
-                                          <v-btn
-                                            v-if="environment.primaryLink"
-                                            :href="environment.primaryLink"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            variant="tonal"
-                                            size="small"
-                                            prepend-icon="mdi-launch"
-                                          >
-                                            Open
-                                          </v-btn>
-                                          <v-btn
-                                            v-if="environment.projectId && (environment.blockingTasks || environment.openTasks)"
-                                            variant="text"
-                                            size="small"
-                                            density="comfortable"
-                                            prepend-icon="mdi-account-question"
-                                            @click="reviewProjectHumanTasks(environment.projectId)"
-                                          >
-                                            Human tasks
-                                          </v-btn>
-                                          <v-spacer />
-                                          <span class="text-caption text-medium-emphasis" v-if="environment.updated_at">
-                                            Updated · {{ formatTimestamp(environment.updated_at) }}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div
-                                      v-else
-                                      class="workspace-environment__empty text-body-2 text-medium-emphasis"
-                                    >
-                                      No runtimes registered yet.
-                                    </div>
-                                  </div>
-                                  <div class="workspace-directory__footer">
-                                    <v-btn
-                                      v-if="workspace.hasHumanTasks && workspace.id !== '__unscoped__'"
-                                      variant="text"
-                                      size="small"
-                                      density="comfortable"
-                                      prepend-icon="mdi-account-question"
-                                      @click="reviewProjectHumanTasks(workspace.id)"
-                                    >
-                                      Review human tasks
-                                    </v-btn>
-                                  </div>
-                            </div>
-                          </div>
-                            </div>
-                          </div>
-                      </div>
-                    </v-card>
-                  </v-col>
-                </v-row>
-                <v-row class="settings-log-row mt-6">
-                  <v-col cols="12">
+                  <v-col v-if="isAuthenticated" cols="12" md="8" lg="8">
                     <v-card
                       elevation="0"
                       class="panel-card log-card settings-log-card"
@@ -5708,6 +5810,256 @@
                   </v-col>
                 </v-row>
               </v-container>
+              <v-container
+                v-else-if="activeView === 'workspaces'"
+                class="py-6 main-layout main-layout--workspaces"
+                fluid
+              >
+                <v-row justify="center">
+                  <v-col cols="12" lg="12">
+                    <v-card
+                      elevation="0"
+                      class="panel-card workspace-panel workspace-panel--page"
+                      data-tour-id="tour-workspaces-panel"
+                    >
+                      <v-card-title class="workspace-panel__title">
+                        <div>
+                          <div class="text-h6">Workspaces</div>
+                          <div class="workspace-panel__summary">
+                            Review runtime inventories, contacts, and launch links for every workspace.
+                          </div>
+                        </div>
+                        <div class="workspace-panel__actions">
+                          <v-chip size="small" label variant="tonal">
+                            {{ projectDirectorySummary }}
+                          </v-chip>
+                          <v-btn
+                            icon="mdi-refresh"
+                            variant="text"
+                            density="comfortable"
+                            :loading="environmentLoading"
+                            :disabled="environmentLoading"
+                            @click="refreshEnvironments"
+                            aria-label="Refresh workspace data"
+                          ></v-btn>
+                        </div>
+                      </v-card-title>
+                      <v-divider />
+                      <div class="workspace-panel__body">
+                        <div class="workspace-panel__section">
+                          <div class="workspace-panel__section-header">
+                            <div>
+                              <div class="text-subtitle-2 font-weight-medium">Workspace directory</div>
+                              <div class="workspace-panel__summary">{{ projectDirectorySummary }}</div>
+                            </div>
+                            <v-text-field
+                              v-model="projectSearch"
+                              variant="outlined"
+                              density="compact"
+                              hide-details
+                              prepend-inner-icon="mdi-magnify"
+                              placeholder="Search workspaces"
+                              data-tour-id="tour-workspaces-search"
+                            />
+                          </div>
+                          <div class="workspace-panel__content" data-tour-id="tour-workspaces-entry">
+                            <v-alert
+                              v-if="environmentError"
+                              type="error"
+                              variant="tonal"
+                              density="comfortable"
+                              border="start"
+                              class="mb-4"
+                            >
+                              {{ environmentError }}
+                            </v-alert>
+                            <div v-if="!projectDirectoryEntries.length" class="text-body-2 text-medium-emphasis">
+                              No workspaces match your search.
+                            </div>
+                            <div v-else class="workspace-directory">
+                              <div
+                                v-for="workspace in projectDirectoryEntries"
+                                :key="workspace.id"
+                                class="workspace-directory__item"
+                              >
+                                <div class="workspace-directory__header">
+                                  <div>
+                                    <div class="workspace-directory__name">{{ workspace.name || workspace.id }}</div>
+                                    <div class="workspace-directory__description">
+                                      {{ workspace.description || 'No description available.' }}
+                                    </div>
+                                  </div>
+                                  <div class="workspace-directory__actions">
+                                    <v-chip size="small" label variant="tonal" color="primary">
+                                      Runtimes · {{ workspace.environmentCount }}
+                                    </v-chip>
+                                    <v-chip
+                                      v-if="workspace.blockingTasks"
+                                      size="small"
+                                      label
+                                      variant="tonal"
+                                      color="error"
+                                    >
+                                      Blocking · {{ workspace.blockingTasks }}
+                                    </v-chip>
+                                    <v-chip
+                                      v-else-if="workspace.openTasks"
+                                      size="small"
+                                      label
+                                      variant="tonal"
+                                      color="warning"
+                                    >
+                                      Human tasks · {{ workspace.openTasks }}
+                                    </v-chip>
+                                    <v-btn
+                                      v-if="workspace.launch_url"
+                                      :href="workspace.launch_url"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      size="small"
+                                      icon="mdi-open-in-new"
+                                      variant="text"
+                                      :title="'Open ' + (workspace.name || workspace.id) + ' workspace link'"
+                                    ></v-btn>
+                                  </div>
+                                </div>
+                                <div class="workspace-directory__meta">
+                                  <div class="workspace-directory__meta-item" v-if="workspace.runtimeSummary">
+                                    <span>Runtimes</span>
+                                    <span>{{ workspace.runtimeSummary }}</span>
+                                  </div>
+                                  <div class="workspace-directory__meta-item" v-if="workspace.primaryContact">
+                                    <span>Contact</span>
+                                    <span>{{ workspace.primaryContact }}</span>
+                                  </div>
+                                  <div class="workspace-directory__meta-item" v-if="workspace.sourceSummary">
+                                    <span>Sources</span>
+                                    <span>{{ workspace.sourceSummary }}</span>
+                                  </div>
+                                </div>
+                                <div class="workspace-directory__environments">
+                                  <div
+                                    v-if="workspace.environments && workspace.environments.length"
+                                    class="workspace-environment-list"
+                                  >
+                                    <div
+                                      v-for="environment in workspace.environments"
+                                      :key="environment.id"
+                                      class="workspace-environment"
+                                    >
+                                      <div class="workspace-environment__header">
+                                        <div>
+                                          <div class="workspace-environment__name">{{ environment.name }}</div>
+                                          <div class="workspace-environment__subline">
+                                            {{ formatStatus(environment.lifecycleState) }} ·
+                                            {{ formatStatus(environment.healthStatus) }}
+                                          </div>
+                                        </div>
+                                        <div class="workspace-environment__badges">
+                                          <v-chip
+                                            size="x-small"
+                                            label
+                                            :color="getLifecycleStatusColor(environment.lifecycleState)"
+                                            class="text-uppercase font-weight-medium"
+                                          >
+                                            {{ environment.lifecycleState || 'unknown' }}
+                                          </v-chip>
+                                          <v-chip
+                                            size="x-small"
+                                            label
+                                            :color="getHealthStatusColor(environment.healthStatus)"
+                                            class="text-uppercase font-weight-medium"
+                                          >
+                                            {{ environment.healthStatus || 'unknown' }}
+                                          </v-chip>
+                                        </div>
+                                      </div>
+                                      <div class="workspace-environment__meta">
+                                        <div class="workspace-environment__meta-item" v-if="environment.host">
+                                          <span class="mdi mdi-server"></span>
+                                          <span>{{ environment.host }}</span>
+                                        </div>
+                                        <div class="workspace-environment__meta-item" v-if="environment.region">
+                                          <span class="mdi mdi-earth"></span>
+                                          <span>{{ environment.region }}</span>
+                                        </div>
+                                        <div class="workspace-environment__meta-item" v-if="environment.primaryOwner">
+                                          <span class="mdi mdi-account"></span>
+                                          <span>{{ environment.primaryOwner }}</span>
+                                        </div>
+                                      </div>
+                                      <div class="workspace-environment__links" v-if="environment.links?.length">
+                                        <v-btn
+                                          v-for="link in environment.links"
+                                          :key="link.href"
+                                          :href="link.href"
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          variant="tonal"
+                                          size="small"
+                                          prepend-icon="mdi-launch"
+                                        >
+                                          {{ link.label }}
+                                        </v-btn>
+                                      </div>
+                                      <div class="workspace-environment__actions">
+                                        <v-btn
+                                          v-if="environment.primaryLink"
+                                          :href="environment.primaryLink"
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          variant="tonal"
+                                          size="small"
+                                          prepend-icon="mdi-launch"
+                                        >
+                                          Open
+                                        </v-btn>
+                                        <v-btn
+                                          v-if="environment.projectId && (environment.blockingTasks || environment.openTasks)"
+                                          variant="text"
+                                          size="small"
+                                          density="comfortable"
+                                          prepend-icon="mdi-account-question"
+                                          @click="reviewProjectHumanTasks(environment.projectId)"
+                                        >
+                                          Human tasks
+                                        </v-btn>
+                                        <v-spacer />
+                                        <span class="text-caption text-medium-emphasis" v-if="environment.updated_at">
+                                          Updated · {{ formatTimestamp(environment.updated_at) }}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div
+                                    v-else
+                                    class="workspace-environment__empty text-body-2 text-medium-emphasis"
+                                  >
+                                    No runtimes registered yet.
+                                  </div>
+                                </div>
+                                <div class="workspace-directory__footer">
+                                  <v-btn
+                                    v-if="workspace.hasHumanTasks && workspace.id !== '__unscoped__'"
+                                    variant="text"
+                                    size="small"
+                                    density="comfortable"
+                                    prepend-icon="mdi-account-question"
+                                    @click="reviewProjectHumanTasks(workspace.id)"
+                                  >
+                                    Review human tasks
+                                  </v-btn>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </v-card>
+                  </v-col>
+                </v-row>
+              </v-container>
+
               <v-container v-else class="py-6 main-layout" fluid>
 
                 <v-row class="main-row">
@@ -5747,7 +6099,7 @@
                           variant="text"
                           size="small"
                           prepend-icon="mdi-view-dashboard-outline"
-                          @click="showWorkspacePanel"
+                          @click="openWorkspacesView"
                         >
                           Workspace overview
                         </v-btn>
@@ -5812,7 +6164,26 @@
                         </div>
                         <v-expand-transition>
                           <div class="queue-composer__body" v-show="!isMobileLayout || mobileComposerExpanded">
-                            <div v-if="humanTaskReplyTarget" class="human-task-reply-banner">
+                            <div v-if="promptReplyTarget" class="prompt-reply-banner">
+                              <span class="mdi mdi-reply prompt-reply-banner__icon" aria-hidden="true"></span>
+                              <div class="prompt-reply-banner__text">
+                                Replying to
+                                <strong>{{ formatPromptReplyReference(promptReplyTarget) }}</strong>
+                                <span v-if="promptReplyTarget.projectDisplay">
+                                  · {{ promptReplyTarget.projectDisplay }}
+                                </span>
+                              </div>
+                              <v-btn
+                                class="prompt-reply-banner__clear"
+                                variant="text"
+                                size="x-small"
+                                color="primary"
+                                @click="clearPromptReply"
+                              >
+                                Cancel
+                              </v-btn>
+                            </div>
+                            <div v-else-if="humanTaskReplyTarget" class="human-task-reply-banner">
                               <span class="mdi mdi-account-question human-task-reply-banner__icon" aria-hidden="true"></span>
                               <div class="human-task-reply-banner__text">
                                 Replying to
@@ -5834,9 +6205,11 @@
                             <v-textarea
                               v-model="promptText"
                               :placeholder="
-                                humanTaskReplyTarget
-                                  ? 'Reply to ' + formatHumanTaskReference(humanTaskReplyTarget)
-                                  : 'Type your next instruction to Nightshift'
+                                promptReplyTarget
+                                  ? 'Reply to ' + formatPromptReplyReference(promptReplyTarget)
+                                  : humanTaskReplyTarget
+                                    ? 'Reply to ' + formatHumanTaskReference(humanTaskReplyTarget)
+                                    : 'Type your next instruction to Nightshift'
                               "
                               variant="outlined"
                               auto-grow
@@ -5845,25 +6218,6 @@
                               @keydown.enter="handleComposerKeydown"
                             />
                             <div class="composer-actions">
-                              <div class="text-caption text-medium-emphasis codex-status" v-if="codexStatusInfo">
-                                <template v-if="codexStatusInfo.error">
-                                  <span class="codex-status__error">{{ codexStatusInfo.error }}</span>
-                                </template>
-                                <template v-else>
-                                  <div class="codex-status__line" v-if="codexStatusInfo.fiveHour">
-                                    <span>{{ codexStatusInfo.fiveHour.label }}</span>
-                                    <span class="codex-status__value">
-                                      {{ codexStatusInfo.fiveHour.value || '—' }}
-                                    </span>
-                                  </div>
-                                  <div class="codex-status__line" v-if="codexStatusInfo.weekly">
-                                    <span>{{ codexStatusInfo.weekly.label }}</span>
-                                    <span class="codex-status__value">
-                                      {{ codexStatusInfo.weekly.value || '—' }}
-                                    </span>
-                                  </div>
-                                </template>
-                              </div>
                               <v-btn
                                 color="primary"
                                 :loading="submitting"
@@ -5880,16 +6234,18 @@
                       <v-card-text class="queue-scroll" data-tour-id="tour-queue-list">
                         <v-skeleton-loader v-if="loading" type="list-item@4" />
                         <div v-else class="queue-list">
-                          <button
+                          <div
                             v-for="entry in queueEntries"
                             :key="entry.prompt_id"
-                            type="button"
                             class="queue-entry"
                             :class="{ active: selectedPrompt && selectedPrompt.prompt_id === entry.prompt_id }"
+                            role="button"
+                            tabindex="0"
                             @click="selectPrompt(entry)"
+                            @keydown.enter.prevent="selectPrompt(entry)"
+                            @keydown.space.prevent="selectPrompt(entry)"
                           >
                             <div class="queue-entry-header">
-                              <span class="queue-entry-index">#{{ entry.queueIndex }}</span>
                               <span
                                 class="queue-entry-status"
                                 :class="'status-' + ((entry.status || '').toLowerCase())"
@@ -5898,6 +6254,35 @@
                               </span>
                               <span class="queue-entry-created">{{ entry.createdDisplay }}</span>
                               <span class="queue-entry-runtime">Time {{ entry.runtimeDisplay || '—' }}</span>
+                              <div
+                                v-if="canReplyToPrompt(entry) || canCancelPrompt(entry)"
+                                class="queue-entry-actions"
+                              >
+                                <button
+                                  v-if="canCancelPrompt(entry)"
+                                  type="button"
+                                  class="queue-entry-action queue-entry-action--cancel"
+                                  :disabled="canceling"
+                                  @click.stop="cancelQueueEntry(entry)"
+                                  :aria-label="'Cancel ' + formatPromptReplyReference(entry)"
+                                  :title="'Cancel ' + formatPromptReplyReference(entry)"
+                                >
+                                  <span class="mdi mdi-close" aria-hidden="true"></span>
+                                </button>
+                                <button
+                                  v-if="canReplyToPrompt(entry)"
+                                  type="button"
+                                  class="queue-entry-action"
+                                  @click.stop="startPromptReply(entry)"
+                                  :aria-label="'Reply to ' + formatPromptReplyReference(entry)"
+                                  :title="'Reply to ' + formatPromptReplyReference(entry)"
+                                >
+                                  <span class="mdi mdi-reply" aria-hidden="true"></span>
+                                </button>
+                              </div>
+                            </div>
+                            <div class="queue-entry-subtitle">
+                              Task ID · {{ entry.prompt_id }}
                             </div>
                             <div class="queue-entry-detail">
                               {{ entry.detailLine }}
@@ -5909,7 +6294,19 @@
                               <span class="mdi mdi-account-question" aria-hidden="true"></span>
                               <span>Reply to · {{ formatHumanTaskReference(entry.human_task) }}</span>
                             </div>
-                          </button>
+                            <div
+                              v-if="entry.reply_to_prompt_id"
+                              class="queue-entry-prompt-reference"
+                            >
+                              <span class="mdi mdi-link-variant" aria-hidden="true"></span>
+                              <span>
+                                Follows ·
+                                {{
+                                  formatPromptReplyReference({ prompt_id: entry.reply_to_prompt_id })
+                                }}
+                              </span>
+                            </div>
+                          </div>
                           <div v-if="!queueEntries.length" class="text-center text-medium-emphasis py-6">
                             No prompts yet — type a prompt above.
                           </div>
@@ -5953,6 +6350,17 @@
                               >
                                 Cancel
                               </v-btn>
+                              <v-btn
+                                v-else-if="canReplyToSelectedPrompt"
+                                class="chat-card-title__reply"
+                                color="primary"
+                                variant="tonal"
+                                size="small"
+                                prepend-icon="mdi-reply"
+                                @click="startPromptReply(selectedPrompt)"
+                              >
+                                Reply
+                              </v-btn>
                             </div>
                             <span
                               v-if="selectedPromptProjectName"
@@ -5986,6 +6394,21 @@
                           >
                             <span class="mdi mdi-account-question" aria-hidden="true"></span>
                             <span>Reply to · {{ formatHumanTaskReference(selectedPrompt.human_task) }}</span>
+                          </div>
+                          <div
+                            v-if="selectedPrompt?.reply_to_prompt_id"
+                            class="chat-card-prompt-reply"
+                          >
+                            <span class="mdi mdi-link-variant" aria-hidden="true"></span>
+                            <span>
+                              Follow-up ·
+                              {{
+                                formatPromptReplyReference(
+                                  selectedPrompt.reply_to_prompt ||
+                                    { prompt_id: selectedPrompt.reply_to_prompt_id }
+                                )
+                              }}
+                            </span>
                           </div>
                         </div>
                         <div class="thread-header__actions">
@@ -6274,7 +6697,7 @@
                   <button
                     type="button"
                     class="guided-tour-button"
-                    :disabled="guidedTourStepNumber === 1"
+                    :disabled="isGuidedTourAtFirstOverallStep"
                     @click="previousGuidedTourStep"
                   >
                     Back
@@ -6284,7 +6707,7 @@
                     class="guided-tour-button guided-tour-button--primary"
                     @click="advanceGuidedTour"
                   >
-                    {{ isGuidedTourLastStep ? 'Finish tour' : 'Next' }}
+                    {{ guidedTourPrimaryButtonLabel }}
                   </button>
                 </div>
               </div>

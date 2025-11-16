@@ -67,9 +67,6 @@ TERMINAL_PROMPT_STATUSES: set[str] = {"completed", "failed", "canceled"}
 TERMINAL_PROMPT_STATUS_ORDER: tuple[str, ...] = ("completed", "failed", "canceled")
 PROMPT_STATUSES: tuple[str, ...] = ("queued", "running", PROMPT_STATUS_SERVER_RESTARTING, "completed", "failed", "canceled")
 EDITABLE_PROMPT_STATUSES: set[str] = {"queued"} | TERMINAL_PROMPT_STATUSES
-CODEX_STATUS_CACHE_TTL_SECONDS = 120.0
-_CODEX_STATUS_CACHE: Dict[str, Any] = {"timestamp": 0.0, "payload": None}
-_CODEX_STATUS_LOCK = threading.Lock()
 
 
 def schedule_display_refresh(reason: str) -> None:
@@ -123,100 +120,6 @@ def seconds_since(timestamp: Optional[str]) -> Optional[float]:
         return None
     delta = (datetime.now(timezone.utc) - reference).total_seconds()
     return delta if delta >= 0 else 0.0
-
-
-def _extract_codex_limit_lines(text: str) -> tuple[Optional[str], Optional[str]]:
-    five_hour_line: Optional[str] = None
-    weekly_line: Optional[str] = None
-    if not text:
-        return five_hour_line, weekly_line
-    keywords_5h = ("5h", "5-hour", "5 hour", "five hour")
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        lowered = line.lower()
-        if five_hour_line is None and any(keyword in lowered for keyword in keywords_5h):
-            five_hour_line = line
-        if weekly_line is None and "week" in lowered:
-            weekly_line = line
-        if five_hour_line and weekly_line:
-            break
-    return five_hour_line, weekly_line
-
-
-def _format_codex_limit_line(line: Optional[str], fallback_label: str) -> Optional[Dict[str, str]]:
-    if not line:
-        return None
-    text = line.strip()
-    if not text:
-        return None
-    label = fallback_label
-    value = text
-    if ":" in text:
-        prefix, suffix = text.split(":", 1)
-        prefix = prefix.strip()
-        suffix = suffix.strip()
-        if prefix:
-            label = prefix
-        if suffix:
-            value = suffix
-    return {"label": label, "value": value}
-
-
-def _collect_codex_status_payload() -> Dict[str, Any]:
-    timestamp = utcnow_iso()
-    codex_bin = os.environ.get("CODEX_CLI", "codex")
-    command = [codex_bin, "/status"]
-    try:
-        completed = subprocess.run(
-            command,
-            cwd=str(REPO_ROOT),
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=30,
-        )
-    except FileNotFoundError:
-        return {"error": "Codex CLI is not available", "fetched_at": timestamp}
-    except subprocess.TimeoutExpired:
-        return {"error": "Codex status request timed out", "fetched_at": timestamp}
-    except Exception as exc:  # pragma: no cover - defensive path
-        return {"error": f"Unable to query Codex status: {exc}", "fetched_at": timestamp}
-    stdout = completed.stdout.strip()
-    stderr = completed.stderr.strip()
-    five_line, weekly_line = _extract_codex_limit_lines(stdout)
-    payload: Dict[str, Any] = {
-        "fetched_at": timestamp,
-        "five_hour": _format_codex_limit_line(five_line, "5h limit"),
-        "weekly": _format_codex_limit_line(weekly_line, "Weekly limit"),
-    }
-    if stdout:
-        payload["raw_output"] = stdout
-    if completed.returncode != 0:
-        payload["error"] = stderr or f"Codex status exited with {completed.returncode}"
-    elif stderr:
-        payload["warning"] = stderr
-    return payload
-
-
-def get_codex_status(force_refresh: bool = False) -> Dict[str, Any]:
-    now = time.monotonic()
-    with _CODEX_STATUS_LOCK:
-        cached_payload = _CODEX_STATUS_CACHE.get("payload")
-        cached_timestamp = _CODEX_STATUS_CACHE.get("timestamp", 0.0)
-    if (
-        not force_refresh
-        and cached_payload
-        and isinstance(cached_timestamp, (int, float))
-        and now - cached_timestamp < CODEX_STATUS_CACHE_TTL_SECONDS
-    ):
-        return cached_payload
-    payload = _collect_codex_status_payload()
-    with _CODEX_STATUS_LOCK:
-        _CODEX_STATUS_CACHE["payload"] = payload
-        _CODEX_STATUS_CACHE["timestamp"] = time.monotonic()
-    return payload
 
 
 def ensure_dirs() -> None:
@@ -1192,6 +1095,30 @@ def _build_prompt_human_task_context(
     return build_human_task_payload(task_record, registry)
 
 
+def _build_prompt_reply_context(record: "PromptRecord") -> Optional[Dict[str, Any]]:
+    reference_id = getattr(record, "reply_to_prompt_id", None)
+    if not reference_id:
+        return None
+    store = APP_CONTEXT.get("store")
+    if not store:
+        return {"prompt_id": reference_id}
+    referenced = store.get_prompt(reference_id)
+    if not referenced:
+        return {"prompt_id": reference_id}
+    summary_text = referenced.result_summary or ""
+    summary_inline = summary_text.strip()
+    if summary_inline:
+        summary_inline = " ".join(summary_inline.split())
+    return {
+        "prompt_id": referenced.prompt_id,
+        "status": referenced.status,
+        "project_id": referenced.project_id,
+        "created_at": referenced.created_at,
+        "updated_at": referenced.updated_at,
+        "result_summary": summary_inline,
+    }
+
+
 def build_prompt_payload(record: "PromptRecord", registry: Optional[ProjectRegistry] = None) -> Dict[str, Any]:
     """Return the full API payload for a single prompt record."""
     if registry is None:
@@ -1221,6 +1148,9 @@ def build_prompt_payload(record: "PromptRecord", registry: Optional[ProjectRegis
     human_task_payload = _build_prompt_human_task_context(record, registry)
     if human_task_payload:
         payload["human_task"] = human_task_payload
+    reply_payload = _build_prompt_reply_context(record)
+    if reply_payload:
+        payload["reply_to_prompt"] = reply_payload
     return payload
 
 
@@ -1242,6 +1172,7 @@ class PromptRecord:
     last_run_seconds: Optional[float] = None
     last_finished_at: Optional[str] = None
     human_task_id: Optional[str] = None
+    reply_to_prompt_id: Optional[str] = None
     server_restart_required: bool = False
     server_restart_marked_at: Optional[str] = None
 
@@ -1299,6 +1230,9 @@ class PromptStore:
                 payload.setdefault("last_run_seconds", None)
                 payload.setdefault("server_restart_required", False)
                 payload.setdefault("server_restart_marked_at", None)
+                payload["reply_to_prompt_id"] = self._normalize_reply_to_prompt_id(
+                    payload.get("reply_to_prompt_id")
+                )
                 if status in TERMINAL_PROMPT_STATUSES:
                     payload["last_finished_at"] = payload.get("last_finished_at") or payload.get("updated_at")
                 else:
@@ -1424,11 +1358,13 @@ class PromptStore:
         project_id: Optional[str] = None,
         *,
         human_task_id: Optional[str] = None,
+        reply_to_prompt_id: Optional[str] = None,
     ) -> PromptRecord:
         prompt_id = uuid.uuid4().hex
         log_path = str(LOG_DIR / f"prompt_{prompt_id}.log")
         normalized_project = self._normalize_project_id(project_id)
         normalized_task = self._normalize_human_task_id(human_task_id)
+        normalized_reference = self._normalize_reply_to_prompt_id(reply_to_prompt_id)
         now = utcnow_iso()
         record = PromptRecord(
             prompt_id=prompt_id,
@@ -1440,6 +1376,7 @@ class PromptStore:
             log_path=log_path,
             project_id=normalized_project,
             human_task_id=normalized_task,
+            reply_to_prompt_id=normalized_reference,
         )
         with self._lock:
             self._records[prompt_id] = record
@@ -1467,6 +1404,9 @@ class PromptStore:
             human_task_payload = _build_prompt_human_task_context(record, registry)
             if human_task_payload:
                 payload["human_task"] = human_task_payload
+            reply_payload = _build_prompt_reply_context(record)
+            if reply_payload:
+                payload["reply_to_prompt"] = reply_payload
             payload["queue_position"] = None
             return payload
 
@@ -1675,6 +1615,12 @@ class PromptStore:
         if task_id is None:
             return None
         cleaned = str(task_id).strip()
+        return cleaned or None
+
+    def _normalize_reply_to_prompt_id(self, prompt_id: Optional[str]) -> Optional[str]:
+        if prompt_id is None:
+            return None
+        cleaned = str(prompt_id).strip()
         return cleaned or None
 
     def mark_completed(self, prompt_id: str, summary: str) -> None:
@@ -2230,28 +2176,52 @@ class PromptWorker(threading.Thread):
 
     def _prepare_prompt_text(self, record: PromptRecord) -> str:
         prompt_text = record.text
+        advisories: list[str] = []
+        reply_reference = getattr(record, "reply_to_prompt_id", None)
+        if reply_reference:
+            store: Optional[PromptStore] = APP_CONTEXT.get("store")
+            reference_record: Optional[PromptRecord] = store.get_prompt(reply_reference) if store else None
+            reference_label = f"task {reply_reference}"
+            if reference_record and reference_record.project_id:
+                reference_label = f"task {reference_record.prompt_id}"
+            follow_up_lines = [
+                f"This prompt is a follow-up to {reference_label}.",
+                f"Follow-up reference ID: {reply_reference}",
+                (
+                    "Open that task in the Task Queue (or review its log in logs/prompt_<id>.log) "
+                    "before writing your response so you fully understand what completed."
+                ),
+                "Explicitly describe how your update addresses the follow-up context before you finish.",
+            ]
+            if reference_record and reference_record.result_summary:
+                summary_text = self._inline_text(reference_record.result_summary)
+                if summary_text:
+                    follow_up_lines.append(f"Previous completion summary: {summary_text}")
+            advisories.append("\n".join(follow_up_lines))
         task_id = record.human_task_id
-        if not task_id:
+        if task_id:
+            store: Optional[HumanTaskStore] = APP_CONTEXT.get("human_tasks")
+            task_title = ""
+            if store:
+                task_record = store.get_task(task_id)
+                if task_record and task_record.title:
+                    task_title = self._inline_text(task_record.title)
+            reference_label = task_title or f"task {task_id}"
+            advisory_lines = [
+                f"This prompt is a reply to human task {reference_label}.",
+                f"Human task reference ID: {task_id}",
+                (
+                    "Look up this human task entry (via the Human Tasks panel or scripts/human_tasks.py list) "
+                    "to review the operator's notes, gather the full context, and decide on any follow-up actions "
+                    "before concluding your response."
+                ),
+                "Call out in your update whether more follow-up work is needed.",
+            ]
+            advisories.append("\n".join(advisory_lines))
+        if not advisories:
             return prompt_text
-        store: Optional[HumanTaskStore] = APP_CONTEXT.get("human_tasks")
-        task_title = ""
-        if store:
-            task_record = store.get_task(task_id)
-            if task_record and task_record.title:
-                task_title = self._inline_text(task_record.title)
-        reference_label = task_title or f"task {task_id}"
-        advisory_lines = [
-            f"This prompt is a reply to human task {reference_label}.",
-            f"Human task reference ID: {task_id}",
-            (
-                "Look up this human task entry (via the Human Tasks panel or scripts/human_tasks.py list) "
-                "to review the operator's notes, gather the full context, and decide on any follow-up actions "
-                "before concluding your response."
-            ),
-            "Call out in your update whether more follow-up work is needed.",
-        ]
-        advisory = "\n".join(advisory_lines)
-        return f"{advisory}\n\n---\n\n{prompt_text}"
+        advisory_text = "\n\n---\n\n".join(advisories)
+        return f"{advisory_text}\n\n---\n\n{prompt_text}"
 
     @staticmethod
     def _inline_text(value: str) -> str:
@@ -2579,7 +2549,6 @@ class EventStreamer:
                 "human_tasks": task_metrics,
                 "environments": environment_metrics,
             },
-            "codex_status": get_codex_status(),
         }
         self.ws_manager.broadcast("health", payload, targets=targets)
 
@@ -2695,7 +2664,6 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 "pending": metrics.get("status_counts", {}).get("queued", 0),
                 "metrics": {**metrics, "human_tasks": human_metrics, "environments": environment_metrics},
                 "user": APP_CONTEXT["auth"].user_payload(self.current_user) if self.current_user else None,
-                "codex_status": get_codex_status(),
             }
             self._write_json(payload)
         elif clean_path == "/api/prompts":
@@ -2796,10 +2764,26 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 if not task_store or not task_store.get_task(human_task_id):
                     self._write_json({"error": "human task not found"}, status=404)
                     return
-            record = APP_CONTEXT["store"].add_prompt(
+            reply_value = (
+                payload.get("reply_to_prompt_id")
+                or payload.get("reply_prompt_id")
+                or payload.get("reply_to_prompt")
+            )
+            reply_to_prompt_id = str(reply_value).strip() if reply_value is not None else ""
+            store: PromptStore = APP_CONTEXT["store"]
+            if reply_to_prompt_id:
+                referenced_prompt = store.get_prompt(reply_to_prompt_id)
+                if not referenced_prompt:
+                    self._write_json({"error": "referenced prompt not found"}, status=404)
+                    return
+                if referenced_prompt.status != "completed":
+                    self._write_json({"error": "follow-up prompts require a completed task"}, status=400)
+                    return
+            record = store.add_prompt(
                 text.strip(),
                 project_id=project_id,
                 human_task_id=human_task_id or None,
+                reply_to_prompt_id=reply_to_prompt_id or None,
             )
             APP_CONTEXT["audit_logger"].info("Queued prompt %s", record.prompt_id)
             schedule_display_refresh("queued")
