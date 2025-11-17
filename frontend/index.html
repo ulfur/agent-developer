@@ -187,6 +187,11 @@
         overflow: hidden;
       }
 
+      .queue-card {
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+
       .chat-card__header {
         display: flex;
         align-items: flex-start;
@@ -975,6 +980,92 @@
         gap: 1rem;
       }
 
+      .prompt-templates {
+        margin-bottom: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+      }
+
+      .prompt-templates-panel {
+        margin-top: 0.75rem;
+        border: 1px solid var(--detail-panel-border);
+        border-radius: 12px;
+      }
+
+      .prompt-templates-panel .prompt-templates {
+        margin-bottom: 0;
+      }
+
+      .prompt-templates__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.85rem 1rem;
+      }
+
+      .prompt-templates__title {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+
+      .prompt-templates__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 0.5rem;
+      }
+
+      .prompt-templates__toggle {
+        flex-shrink: 0;
+      }
+
+      .prompt-templates--scrollable {
+        max-height: 240px;
+        overflow-y: auto;
+        padding: 0 1rem 1rem;
+      }
+
+      .prompt-template-card {
+        border: 1px solid var(--detail-panel-border);
+        border-radius: 10px;
+        background-color: rgba(99, 102, 241, 0.08);
+        color: inherit;
+        padding: 0.65rem 0.75rem;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.3rem;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+        cursor: pointer;
+        text-align: left;
+        width: 100%;
+      }
+
+      .prompt-template-card:hover,
+      .prompt-template-card:focus-visible {
+        border-color: var(--primary-color, #6750a4);
+        box-shadow: 0 8px 20px rgba(37, 99, 235, 0.2);
+        transform: translateY(-1px);
+      }
+
+      .prompt-template-card:focus-visible {
+        outline: 2px solid var(--primary-color, #6750a4);
+        outline-offset: 2px;
+      }
+
+      .prompt-template-card__title {
+        font-weight: 600;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+
+      .prompt-template-card__title .mdi {
+        font-size: 1rem;
+      }
+
       .detail-panel {
         margin-top: 0.8rem;
         border-radius: 12px;
@@ -1278,6 +1369,23 @@
         font-weight: 500;
       }
 
+      .queue-card-title__meta {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-left: auto;
+      }
+
+      .identity-chip {
+        text-transform: none;
+        gap: 0.25rem;
+      }
+
+      .identity-chip .mdi {
+        margin-right: 0.2rem;
+      }
+
       .header-menus {
         display: flex;
         align-items: center;
@@ -1432,6 +1540,19 @@
 
       .login-card {
         padding-bottom: 1rem;
+      }
+
+      .pairing-alert__code {
+        font-family: 'JetBrains Mono', Consolas, 'Source Code Pro', monospace;
+        font-size: 1.35rem;
+        letter-spacing: 0.2rem;
+        font-weight: 600;
+        margin: 0.35rem 0;
+      }
+
+      .pairing-alert__meta {
+        font-size: 0.85rem;
+        color: var(--text-muted);
       }
 
       .user-summary {
@@ -1646,6 +1767,44 @@
         gap: 0.75rem;
         flex: 1;
         min-height: 0;
+      }
+
+      .workspace-panel__agent {
+        border: 1px solid var(--card-border);
+        border-radius: 12px;
+        padding: 0.75rem 1rem;
+        background-color: rgba(37, 99, 235, 0.06);
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      .workspace-panel__agent-title {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        letter-spacing: 0.08em;
+      }
+
+      .workspace-panel__agent-name {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      .workspace-panel__agent-meta {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+      }
+
+      .workspace-panel__agent-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
       }
 
       .workspace-panel--collapsed .workspace-panel__body {
@@ -2024,6 +2183,7 @@
         failed: 4,
         canceled: 5,
       };
+      const IDENTITY_POLL_INTERVAL_MS = 30000;
 
       const loadWorkspacePanelPreference = () => {
         if (typeof window === 'undefined' || !window.localStorage) {
@@ -2248,6 +2408,123 @@
           const humanTasksMenuOpen = ref(false);
           const humanTaskReplyTarget = ref(null);
           const promptReplyTarget = ref(null);
+          const promptTemplates = [
+            {
+              id: 'restart-service',
+              title: 'Restart the service',
+              summary: 'Gracefully bounce nightshift.service, mark the restart prompt, and verify recovery.',
+              prompt: `Nightshift needs a controlled restart of nightshift.service to land the latest config without losing queue state.
+Steps:
+1. Inspect /api/prompts (or the UI queue) and confirm no prompts are running except this restart request; if there are, wait or explain why they are safe to interrupt.
+2. Capture why the restart is necessary in logs/progress.log and in this prompt summary so the next operator understands the change.
+3. Immediately before restarting, mark this prompt as server_restarting via POST /api/prompts/<prompt_id>/server_restarting with requires_follow_up=false so the queue preserves the action.
+4. Use systemctl --user restart nightshift.service (or ./scripts/nightshift_compose.sh down && up when Docker is in charge) and stream journalctl --user -u nightshift.service -f until the backend reports ready.
+5. After the service returns, hit GET /api/health, reload the UI, and make sure queue counts, websocket updates, and prompt logs look normal.
+6. Summarize the exact commands and log snippets that prove the restart succeeded plus any anomalies or follow-up work that surfaced.`,
+            },
+            {
+              id: 'review-plan',
+              title: 'Review & update the plan',
+              summary: 'Reconcile docs/upgrade_plan.json with current reality and document notable changes.',
+              prompt: `Bring docs/upgrade_plan.json up to date so the structured plan reflects the latest Nightshift work.
+Steps:
+1. Read docs/upgrade_plan.json, projects/nightshift/context.md, the root README, and the last few queue entries to understand current priorities.
+2. For each existing plan task, confirm the title, dependencies, and status; mark items that landed as completed with timestamps, queued_count, and the prompt_id/log evidence.
+3. Add or reprioritize tasks where new scope has emerged (from roadmap_updates.md, pending PRs, or operator feedback) and ensure every prompt field is actionable.
+4. Normalize formatting (indentation, trailing newlines) and run python -m json.tool docs/upgrade_plan.json before saving so we never commit invalid JSON.
+5. Summarize what changed (new tasks, retired scopes, updated statuses) in this response so the next operator instantly sees the deltas.`,
+            },
+            {
+              id: 'queue-plan-items',
+              title: 'Queue plan items',
+              summary: 'Use scripts/plan_prompt_queue.py to enqueue the next batch of plan tasks and verify persistence.',
+              prompt: `Queue the next ready set of plan tasks so Nightshift keeps progressing without manual copy/paste.
+Steps:
+1. Inspect docs/upgrade_plan.json for pending tasks and pick the next logical batch, respecting dependencies and any operator notes.
+2. Run ./scripts/plan_prompt_queue.py --plan docs/upgrade_plan.json (add --count N if you only want a subset) with the proper --api-token/--api-host/--api-port or --login flags so it talks to the live backend. Fall back to --direct-write only when the service is stopped.
+3. For every queued task, collect the returned prompt_id, confirm it exists in data/prompts.json and logs/progress.log, and update the plan entry's last_prompt_id/queued_count fields before saving.
+4. If the CLI surfaces an error, capture the stderr output, fix the root cause, and rerun until all intended tasks are queued cleanly.
+5. Reply with the list of new prompt_ids, their task titles, and their queue positions so the ops log stays trustworthy.`,
+            },
+            {
+              id: 'commit-and-push',
+              title: 'Review, commit & push',
+              summary: 'Audit the working tree, run tests, commit cleanly, and push the branch for review.',
+              prompt: `Review the current Nightshift changeset and land the ready work upstream.
+Steps:
+1. Run git status and git diff to understand every modification; call out risky areas that may need tests or documentation updates.
+2. Execute the relevant test suites (pytest for backend, npm/vite steps for frontend, ./scripts/nightshift_compose.sh smoke when containers change) and fix any failures before committing. Capture the command output for the report.
+3. Stage logical hunks with git add -p (avoid mixing unrelated files) and craft a descriptive commit message that references this prompt or the scoped task.
+4. Run ./scripts/git_branch_smoke.py to ensure branch discipline automation still passes, then git status again so you know exactly what will be pushed.
+5. Push the branch to origin (creating it if necessary) and note the branch name plus git log -1 so reviewers can find the work quickly.
+6. Summarize what changed, which tests ran, and any TODOs or manual verifications that remain.`,
+            },
+            {
+              id: 'add-workspace',
+              title: 'Add a workspace',
+              summary: 'Provision /workspaces/<project>, clone the repo, and document the onboarding notes.',
+              prompt: `Provision a new project workspace so Codex prompts can operate on it without extra setup.
+Steps:
+1. Confirm the repository URL (or source of truth) and pick a canonical folder name such as /workspaces/<project>; note any SSH tokens or secrets required.
+2. Create the directory (mkdir -p /workspaces/<project>) and clone or rsync the repository into place. Record the commit hash that was checked out and whether submodules/data syncs were needed.
+3. Align ownership and permissions with the existing /workspaces/nightshift tree so Docker/systemd processes can read/write as expected.
+4. If the workspace needs to appear in the UI, add or update the matching entry under projects/<id>/ (context, agents docs, launch path) and mention the change in README.md or projects/nightshift/agents.md.
+5. Smoke-test the workspace by running ls, git status, or a minimal build/test command inside it so we know the files are accessible and tools run correctly.
+6. Document the workspace path, repo URL, and any follow-up requirements (credentials, data refresh cadence) in your final summary.`,
+            },
+            {
+              id: 'triage-prompt',
+              title: 'Triage a failing prompt',
+              summary: 'Investigate a stuck/failed prompt, fix the root cause, and update queue records.',
+              prompt: `Unblock the queue by diagnosing a failing or stuck prompt and either retrying or closing it out.
+Steps:
+1. Identify the prompt_id from the queue snapshot and open logs/prompt_<id>.log plus the data/prompts.json entry to see the last attempts, errors, and timestamps.
+2. Reproduce or inspect the failure locally (rerun the command, check configs, inspect stack traces) to determine whether the root cause is code, environment, or missing prerequisites.
+3. Apply whatever fix is needed, keeping clear notes about files touched, commands run, and verification steps; re-run the relevant tests afterward.
+4. Decide whether to retry the prompt, mark it failed with a detailed summary, or convert it into a human task, and make sure the queue reflects that decision.
+5. Update logs/progress.log (and documentation if appropriate) so other operators know the root cause and mitigation.
+6. Provide a postmortem in this response covering the failure mode, fix, and verification evidence.`,
+            },
+            {
+              id: 'compose-health',
+              title: 'Docker/Compose health check',
+              summary: 'Run ./scripts/nightshift_compose.sh smoke and confirm the containers start cleanly.',
+              prompt: `Verify that the Docker/Compose stack still builds and launches without errors.
+Steps:
+1. Make sure the working tree contains the compose/Dockerfile changes you intend to validate, then run ./scripts/nightshift_compose.sh smoke from the repo root.
+2. Capture the output; if the smoke test fails, debug and rerun until it succeeds (rebuilding images, clearing caches, or fixing syntax errors as needed).
+3. Inspect docker compose ps (or docker ps) plus docker logs for the backend/frontend containers so you know they are healthy and not crash-looping.
+4. Hit http://127.0.0.1:8080/api/health (or the configured host/port) and load the SPA to confirm requests flow through the proxy.
+5. Summarize the commands executed, any fixes applied, and whether the stack is ready for deployment. Include log snippets for both success and failure states.`,
+            },
+            {
+              id: 'handoff-summary',
+              title: 'Prep a handoff summary',
+              summary: 'Capture the queue snapshot, human tasks, and health signals for the next operator.',
+              prompt: `Prepare an end-of-shift handoff so the next operator inherits a clear picture of Nightshift.
+Steps:
+1. Capture the current queue snapshot via GET /api/prompts (or the UI) including active prompt_ids, statuses, queue positions, and any replies chained off of them.
+2. Review open human tasks (GET /api/human-tasks) plus any git branches or diffs still in progress so you can list what remains.
+3. Check system health (GET /api/health, journalctl, docker/systemctl status, disk usage) and note anything that needs monitoring.
+4. Document outstanding risks, blocked items waiting on humans, and the concrete next step for each prompt/workspace.
+5. Append the summary to logs/progress.log (or the standing operations notes) with timestamps so there is an auditable record.
+6. Reply here with a concise but actionable bullet list so the next operator can pick up immediately.`,
+            },
+          ];
+          const applyPromptTemplate = (template) => {
+            if (!template || !template.prompt) {
+              return;
+            }
+            const existing = promptText.value || '';
+            const trimmedExisting = existing.replace(/\s+$/u, '');
+            if (!trimmedExisting) {
+              promptText.value = template.prompt;
+              showPromptTemplates.value = false;
+              return;
+            }
+            promptText.value = `${trimmedExisting}\n\n${template.prompt}`;
+            showPromptTemplates.value = false;
+          };
           const expandedHumanTaskDescriptions = ref({});
           const retrying = ref(false);
           const canceling = ref(false);
@@ -2266,6 +2543,12 @@
           const environmentError = ref('');
           const environmentRevision = ref(null);
           const environmentLastFetched = ref('');
+          const agentIdentity = ref({ status: 'unknown' });
+          const agentIdentityLoading = ref(false);
+          const agentIdentityError = ref('');
+          const syncingAgentIdentity = ref(false);
+          const agentIdentitySyncMessage = ref('');
+          const agentIdentitySyncError = ref('');
           const projectSearch = ref('');
           const workspacePanelCollapsed = ref(false);
           workspacePanelCollapsed.value = loadWorkspacePanelPreference();
@@ -2288,14 +2571,74 @@
             hour: '2-digit',
             minute: '2-digit',
           });
+          const agentIdentityDisplayName = computed(() => {
+            if (agentIdentity.value.status === 'paired') {
+              return (
+                agentIdentity.value.agent?.name ||
+                agentIdentity.value.agent?.id ||
+                'Paired agent'
+              );
+            }
+            if (agentIdentity.value.status === 'pairing') {
+              return 'Awaiting pairing';
+            }
+            return 'Agent identity unavailable';
+          });
+          const agentIdentityHostname = computed(
+            () => agentIdentity.value?.cloudflare?.hostname || ''
+          );
+          const agentIdentityId = computed(() => agentIdentity.value?.agent?.id || '');
+          const agentIdentityChipLabel = computed(() => {
+            if (agentIdentity.value.status === 'paired') {
+              const name =
+                agentIdentity.value.agent?.name ||
+                agentIdentity.value.agent?.id ||
+                'Paired agent';
+              const host = agentIdentityHostname.value;
+              return host ? `${name} · ${host}` : name;
+            }
+            if (agentIdentity.value.status === 'pairing') {
+              const code = agentIdentity.value.pairing_code;
+              return code ? `Pairing · ${code}` : 'Pairing';
+            }
+            return '';
+          });
+          const agentIdentityChipColor = computed(() => {
+            if (agentIdentity.value.status === 'paired') {
+              return agentIdentity.value.sync_error ? 'warning' : 'primary';
+            }
+            if (agentIdentity.value.status === 'pairing') {
+              return 'warning';
+            }
+            return 'grey';
+          });
+          const agentIdentityStatusText = computed(() => {
+            if (agentIdentity.value.status === 'paired') {
+              if (agentIdentity.value.sync_error) {
+                return agentIdentity.value.sync_error?.message || 'Sync needs attention';
+              }
+              const host = agentIdentityHostname.value;
+              return host ? `Paired · ${host}` : 'Paired';
+            }
+            if (agentIdentity.value.status === 'pairing') {
+              const code = agentIdentity.value.pairing_code;
+              return code ? `Pairing code ${code}` : 'Pairing required';
+            }
+            return 'Identity unavailable';
+          });
           const chatThreadRef = ref(null);
           const chatThreadHeight = ref(0);
           const liveStreamScrollRef = ref(null);
+          const queueCardRef = ref(null);
+          const queueComposerBodyRef = ref(null);
+          const composerActionsRef = ref(null);
           let chatThreadResizeObserver = null;
+          let composerResizeObserver = null;
           let reconnectTimer = null;
           let logRefreshTimer = null;
           let elapsedTimer = null;
           let subtitleRotationTimer = null;
+          let identityPollTimer = null;
           let manualRealtimeClose = false;
           const authToken = ref('');
           const currentUser = ref(null);
@@ -2331,6 +2674,7 @@
           const activeMobilePanel = ref('queue');
           const isMobileLayout = computed(() => viewportWidth.value < MOBILE_BREAKPOINT);
           const composerExpanded = ref(!isMobileLayout.value);
+          const showPromptTemplates = ref(false);
           const isAuthenticated = computed(() => Boolean(authToken.value));
           const guidedTourActive = ref(false);
           const guidedTourStepIndex = ref(0);
@@ -2450,6 +2794,45 @@
             composerExpanded.value = !composerExpanded.value;
           };
 
+          const togglePromptTemplates = () => {
+            showPromptTemplates.value = !showPromptTemplates.value;
+            if (showPromptTemplates.value) {
+              ensureComposerVisible();
+            }
+          };
+
+          const getQueueCardElement = () => {
+            const target = queueCardRef.value;
+            if (!target) {
+              return null;
+            }
+            return target.$el || target;
+          };
+
+          const scrollComposerActionsIntoView = () => {
+            if (!composerExpanded.value) {
+              return;
+            }
+            const containerEl = getQueueCardElement();
+            const actionsEl = composerActionsRef.value;
+            if (!containerEl || !actionsEl) {
+              return;
+            }
+            const containerRect = containerEl.getBoundingClientRect();
+            const actionsRect = actionsEl.getBoundingClientRect();
+            if (actionsRect.bottom <= containerRect.bottom) {
+              return;
+            }
+            const offset = actionsRect.bottom - containerRect.bottom + 12;
+            containerEl.scrollTop += offset;
+          };
+
+          const ensureComposerVisible = () => {
+            nextTick(() => {
+              scrollComposerActionsIntoView();
+            });
+          };
+
           watch(
             () => route.name,
             (name, previous) => {
@@ -2474,6 +2857,14 @@
             },
             { immediate: true }
           );
+
+          watch(composerExpanded, (expanded) => {
+            if (!expanded) {
+              showPromptTemplates.value = false;
+              return;
+            }
+            ensureComposerVisible();
+          });
 
           watch(
             selectedProjectId,
@@ -2525,9 +2916,13 @@
             }
           });
 
-          watch(promptText, (value) => {
+          watch(promptText, (value, previous) => {
             if (value && !composerExpanded.value) {
               composerExpanded.value = true;
+              return;
+            }
+            if (value !== previous && composerExpanded.value) {
+              ensureComposerVisible();
             }
           });
 
@@ -2583,6 +2978,21 @@
               if (!authed && guidedTourActive.value) {
                 closeGuidedTour();
               }
+            }
+          );
+
+          watch(
+            () => isAuthenticated.value,
+            () => {
+              fetchAgentIdentity({ silent: true }).catch(() => {});
+            }
+          );
+
+          watch(
+            () => agentIdentity.value.status,
+            () => {
+              agentIdentitySyncError.value = '';
+              agentIdentitySyncMessage.value = '';
             }
           );
 
@@ -2805,6 +3215,9 @@
               }
               case 'health':
                 health.value = payload;
+                if (payload?.identity) {
+                  applyAgentIdentity(payload.identity);
+                }
                 applyHumanTaskMetrics(payload?.metrics?.human_tasks);
                 applyEnvironmentMetrics(payload?.metrics?.environments);
                 break;
@@ -2928,6 +3341,7 @@
             }
           };
 
+          const publicApi = createApiClient(() => '', null);
           const api = createApiClient(
             () => authToken.value,
             () => handleUnauthorized('Session expired. Please sign in again.')
@@ -2967,15 +3381,44 @@
             return `${Math.round(seconds)} s`;
           };
 
-          const formatQueueDuration = (seconds) => {
-            if (seconds == null || Number.isNaN(seconds)) {
-              return '—';
-            }
-            const totalSeconds = Math.max(0, Math.round(seconds));
-            const minutes = Math.floor(totalSeconds / 60);
-            const remainingSeconds = totalSeconds % 60;
-            return `${minutes}m ${remainingSeconds.toString().padStart(2, '0')}s`;
+      const formatQueueDuration = (seconds) => {
+        if (seconds == null || Number.isNaN(seconds)) {
+          return '—';
+        }
+        const totalSeconds = Math.max(0, Math.round(seconds));
+        const minutes = Math.floor(totalSeconds / 60);
+        const remainingSeconds = totalSeconds % 60;
+        return `${minutes}m ${remainingSeconds.toString().padStart(2, '0')}s`;
+      };
+
+      const normalizeAgentIdentity = (payload) => {
+        if (!payload || typeof payload !== 'object') {
+          return { status: 'unknown' };
+        }
+        const status = (payload.status || 'unknown').toLowerCase();
+        if (status !== 'paired') {
+          return {
+            status: 'pairing',
+            pairing_code: payload.pairing_code || '',
+            instructions_url: payload.instructions_url || '',
+            created_at: payload.created_at || '',
           };
+        }
+        return {
+          status: 'paired',
+          agent: payload.agent || {},
+          control_plane: payload.control_plane || {},
+          cloudflare: payload.cloudflare || {},
+          permissions: payload.permissions || {},
+          persona: payload.persona || {},
+          context: payload.context || {},
+          sync_error: payload.sync_error || null,
+        };
+      };
+
+      const applyAgentIdentity = (payload) => {
+        agentIdentity.value = normalizeAgentIdentity(payload);
+      };
 
           const formatHumanTaskStatus = (status) => {
             if (!status) {
@@ -4441,12 +4884,70 @@
             }
           };
 
+          const fetchAgentIdentity = async (options = {}) => {
+            const { silent = false } = options;
+            if (!silent) {
+              agentIdentityLoading.value = true;
+            }
+            agentIdentityError.value = '';
+            try {
+              const data = await publicApi('/api/agent/identity');
+              applyAgentIdentity(data);
+            } catch (error) {
+              agentIdentityError.value = error.message || 'Unable to load agent identity';
+            } finally {
+              if (!silent) {
+                agentIdentityLoading.value = false;
+              }
+            }
+          };
+
+          const stopIdentityPolling = () => {
+            if (identityPollTimer) {
+              clearInterval(identityPollTimer);
+              identityPollTimer = null;
+            }
+          };
+
+          const startIdentityPolling = () => {
+            stopIdentityPolling();
+            identityPollTimer = setInterval(() => {
+              fetchAgentIdentity({ silent: true }).catch(() => {});
+            }, IDENTITY_POLL_INTERVAL_MS);
+          };
+
           const refreshHumanTasks = () => {
             fetchHumanTasks().catch(() => {});
           };
 
           const refreshEnvironments = () => {
             fetchEnvironments().catch(() => {});
+          };
+
+          const syncAgentIdentity = async () => {
+            if (syncingAgentIdentity.value) {
+              return;
+            }
+            if (!isAuthenticated.value) {
+              agentIdentitySyncError.value = 'Sign in to sync identity.';
+              return;
+            }
+            if (agentIdentity.value.status !== 'paired') {
+              agentIdentitySyncError.value = 'Pairing must complete before syncing.';
+              return;
+            }
+            syncingAgentIdentity.value = true;
+            agentIdentitySyncError.value = '';
+            agentIdentitySyncMessage.value = '';
+            try {
+              await api('/api/agent/identity/sync', { method: 'POST' });
+              agentIdentitySyncMessage.value = 'Identity refreshed from control plane.';
+              await fetchAgentIdentity({ silent: true });
+            } catch (error) {
+              agentIdentitySyncError.value = error.message || 'Unable to sync identity';
+            } finally {
+              syncingAgentIdentity.value = false;
+            }
           };
 
           const updateClearingHumanTaskState = (taskId, isClearing) => {
@@ -4597,6 +5098,9 @@
             try {
               const data = await api('/api/health');
               health.value = data;
+              if (data?.identity) {
+                applyAgentIdentity(data.identity);
+              }
               if (data?.user) {
                 currentUser.value = data.user;
               }
@@ -5183,8 +5687,23 @@
           };
 
           onMounted(async () => {
+            if (typeof window !== 'undefined' && typeof window.ResizeObserver !== 'undefined') {
+              composerResizeObserver = new ResizeObserver(() => {
+                scrollComposerActionsIntoView();
+              });
+              const observeComposerBody = () => {
+                const composerBodyEl = queueComposerBodyRef.value;
+                if (composerBodyEl) {
+                  composerResizeObserver.observe(composerBodyEl);
+                }
+              };
+              observeComposerBody();
+              nextTick(observeComposerBody);
+            }
             initTheme();
             startSubtitleRotation();
+             fetchAgentIdentity().catch(() => {});
+             startIdentityPolling();
             if (!elapsedTimer) {
               elapsedTimer = setInterval(() => {
                 nowTick.value = Date.now();
@@ -5220,6 +5739,7 @@
             disconnectRealtime({ manual: true });
             stopLogRefresh();
             stopSubtitleRotation();
+            stopIdentityPolling();
             if (elapsedTimer) {
               clearInterval(elapsedTimer);
               elapsedTimer = null;
@@ -5227,6 +5747,10 @@
             if (chatThreadResizeObserver) {
               chatThreadResizeObserver.disconnect();
               chatThreadResizeObserver = null;
+            }
+            if (composerResizeObserver) {
+              composerResizeObserver.disconnect();
+              composerResizeObserver = null;
             }
             if (typeof window !== 'undefined') {
               window.removeEventListener('resize', handleWindowResize);
@@ -5236,6 +5760,8 @@
 
           return {
             promptText,
+            promptTemplates,
+            applyPromptTemplate,
             queue,
             queueEntries,
             projectOptions,
@@ -5251,6 +5777,7 @@
             isMobileLayout,
             activeMobilePanel,
             composerExpanded,
+            showPromptTemplates,
             workspacePanelCollapsed,
             loading,
             submitting,
@@ -5258,6 +5785,17 @@
             environmentLoading,
             environmentError,
             environmentLastFetched,
+            agentIdentity,
+            agentIdentityDisplayName,
+            agentIdentityChipLabel,
+            agentIdentityChipColor,
+            agentIdentityStatusText,
+            agentIdentityHostname,
+            agentIdentityId,
+            syncAgentIdentity,
+            syncingAgentIdentity,
+            agentIdentitySyncMessage,
+            agentIdentitySyncError,
             refreshEnvironments,
             getHealthStatusColor,
             getLifecycleStatusColor,
@@ -5320,6 +5858,7 @@
             showQueuePanel,
             showThreadPanel,
             toggleComposer,
+            togglePromptTemplates,
             startGuidedTour,
             closeGuidedTour,
             previousGuidedTourStep,
@@ -5351,6 +5890,9 @@
             toggleTheme,
             chatThreadRef,
             liveStreamScrollRef,
+            queueCardRef,
+            queueComposerBodyRef,
+            composerActionsRef,
             formatTimestamp,
             formatDuration,
             formatStatus,
@@ -5738,6 +6280,24 @@
                         Use your email credentials to access the Task queue.
                       </p>
                       <v-alert
+                        v-if="agentIdentity.status !== 'paired'"
+                        type="info"
+                        variant="tonal"
+                        border="start"
+                        density="comfortable"
+                        class="mb-4"
+                      >
+                        <div class="text-subtitle-2 font-weight-medium mb-1">
+                          Pair this agent before signing in
+                        </div>
+                        <div class="pairing-alert__code">
+                          {{ agentIdentity.pairing_code || '----' }}
+                        </div>
+                        <div class="pairing-alert__meta">
+                          Visit {{ agentIdentity.instructions_url || 'nghtshft.ai/pair' }} to claim the code.
+                        </div>
+                      </v-alert>
+                      <v-alert
                         v-if="loginError"
                         type="error"
                         variant="tonal"
@@ -6024,6 +6584,38 @@
                       </v-card-title>
                       <v-divider />
                       <div class="workspace-panel__body">
+                        <div class="workspace-panel__agent" data-tour-id="tour-agent-identity">
+                          <div class="workspace-panel__agent-title">Active agent</div>
+                          <div class="workspace-panel__agent-name">{{ agentIdentityDisplayName }}</div>
+                          <div class="workspace-panel__agent-meta">
+                            <span v-if="agentIdentityHostname">Hostname · {{ agentIdentityHostname }}</span>
+                            <span v-if="agentIdentityId">ID · {{ agentIdentityId }}</span>
+                          </div>
+                          <div class="workspace-panel__agent-actions">
+                            <v-chip size="small" label variant="tonal" :color="agentIdentityChipColor">
+                              <span class="mdi mdi-shield-key-outline" aria-hidden="true"></span>
+                              {{ agentIdentityStatusText }}
+                            </v-chip>
+                            <v-btn
+                              size="small"
+                              variant="text"
+                              prepend-icon="mdi-sync"
+                              :loading="syncingAgentIdentity"
+                              :disabled="
+                                agentIdentity.status !== 'paired' || !isAuthenticated || syncingAgentIdentity
+                              "
+                              @click="syncAgentIdentity"
+                            >
+                              Refresh identity
+                            </v-btn>
+                          </div>
+                          <div v-if="agentIdentitySyncError" class="text-caption text-error">
+                            {{ agentIdentitySyncError }}
+                          </div>
+                          <div v-else-if="agentIdentitySyncMessage" class="text-caption text-success">
+                            {{ agentIdentitySyncMessage }}
+                          </div>
+                        </div>
                         <div class="workspace-panel__section">
                           <div class="workspace-panel__section-header">
                             <div>
@@ -6248,19 +6840,31 @@
                     lg="4"
                     class="d-flex flex-column"
                   >
-                    <v-card elevation="0" class="panel-card queue-card">
+                    <v-card elevation="0" class="panel-card queue-card" ref="queueCardRef">
                       <v-card-title class="queue-card-title">
                         <span>Task Queue</span>
-                        <v-spacer />
-                        <v-chip
-                          class="realtime-chip"
-                          size="small"
-                          label
-                          :color="wsStatus === 'open' ? 'success' : wsStatus === 'connecting' ? 'warning' : 'error'"
-                          variant="tonal"
-                        >
-                          Realtime · {{ formatStatus(wsStatus) }}
-                        </v-chip>
+                        <div class="queue-card-title__meta">
+                          <v-chip
+                            class="realtime-chip"
+                            size="small"
+                            label
+                            :color="wsStatus === 'open' ? 'success' : wsStatus === 'connecting' ? 'warning' : 'error'"
+                            variant="tonal"
+                          >
+                            Realtime · {{ formatStatus(wsStatus) }}
+                          </v-chip>
+                          <v-chip
+                            v-if="agentIdentityChipLabel"
+                            class="identity-chip"
+                            size="small"
+                            label
+                            :color="agentIdentityChipColor"
+                            variant="tonal"
+                          >
+                            <span class="mdi mdi-account-badge" aria-hidden="true"></span>
+                            <span>{{ agentIdentityChipLabel }}</span>
+                          </v-chip>
+                        </div>
                       </v-card-title>
                       <v-divider />
                       <div v-if="isMobileLayout" class="mobile-panel-controls">
@@ -6356,14 +6960,14 @@
                             variant="text"
                             density="comfortable"
                             size="small"
-                            :prepend-icon="composerExpanded ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                            :icon="composerExpanded ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                            :aria-label="composerExpanded ? 'Hide input area' : 'Show input area'"
                             @click="toggleComposer"
                           >
-                            {{ composerExpanded ? 'Hide input area' : 'Show input area' }}
                           </v-btn>
                         </div>
                         <v-expand-transition>
-                          <div class="queue-composer__body" v-show="composerExpanded">
+                          <div class="queue-composer__body" ref="queueComposerBodyRef" v-show="composerExpanded">
                             <div v-if="promptReplyTarget" class="prompt-reply-banner">
                               <span class="mdi mdi-reply prompt-reply-banner__icon" aria-hidden="true"></span>
                               <div class="prompt-reply-banner__text">
@@ -6392,7 +6996,7 @@
                                   · {{ humanTaskReplyTarget.projectDisplay }}
                                 </span>
                               </div>
-                              <v-btn
+                            <v-btn
                                 class="human-task-reply-banner__clear"
                                 variant="text"
                                 size="x-small"
@@ -6417,7 +7021,46 @@
                               hide-details
                               @keydown.enter="handleComposerKeydown"
                             />
-                            <div class="composer-actions">
+                            <div class="prompt-templates-panel">
+                              <div class="prompt-templates__header">
+                                <div class="prompt-templates__title">Quick prompt templates</div>
+                                <v-btn
+                                  class="prompt-templates__toggle"
+                                variant="text"
+                                size="small"
+                                :icon="showPromptTemplates ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                                :aria-label="showPromptTemplates ? 'Hide prompt templates' : 'Show prompt templates'"
+                                @click="togglePromptTemplates"
+                              >
+                              </v-btn>
+                            </div>
+                              <v-expand-transition>
+                                <div
+                                  v-show="showPromptTemplates"
+                                  class="prompt-templates prompt-templates--scrollable"
+                                  role="region"
+                                  aria-label="Prompt templates"
+                                >
+                                  <div class="prompt-templates__grid">
+                                    <button
+                                      v-for="template in promptTemplates"
+                                      :key="template.id"
+                                      type="button"
+                                      class="prompt-template-card"
+                                      :aria-label="'Use template: ' + template.title"
+                                      :title="template.summary"
+                                      @click="applyPromptTemplate(template)"
+                                    >
+                                      <div class="prompt-template-card__title">
+                                        <span class="mdi mdi-flash" aria-hidden="true"></span>
+                                        <span>{{ template.title }}</span>
+                                      </div>
+                                    </button>
+                                  </div>
+                                </div>
+                              </v-expand-transition>
+                            </div>
+                            <div class="composer-actions" ref="composerActionsRef">
                               <v-btn
                                 color="primary"
                                 :loading="submitting"

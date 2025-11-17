@@ -27,6 +27,112 @@
       "queued_count": 2
     },
     {
+      "id": "short-term-roadmap-plan",
+      "title": "Draft a short-term Nightshift execution plan",
+      "description": "Clarify the next couple of high-impact deliverables and ensure the queue contains verified prompts that carry the current planning guidance forward.",
+      "prompt": "Start by re-reading ROADMAP.md, roadmap_updates.md, docs/upgrade_plan.json, and logs/progress.log so you are working from the latest priorities. Summarize the most urgent roadmap themes, then draft a short-term (next 2\u20133 prompts) execution plan that cites the relevant roadmap sections and gaps. Update docs/upgrade_plan.json with the concrete follow-up prompts (including priorities and the recursion instructions about reading the planning docs, verifying queue additions, and carrying those instructions forward). Queue at least the first prompt from that plan, verify every queued prompt appears in both data/prompts.json and logs/progress.log, and record the prompt IDs plus verification evidence in logs/progress.log and your final response. Ensure each new prompt explicitly tells its assignee to re-read the planning docs, confirm any follow-up tasks they queue are persisted in both places, and to propagate those directions recursively before marking this task complete.",
+      "project_id": "nightshift",
+      "priority": 0,
+      "status": "queued",
+      "last_prompt_id": "b15c6e64939a470982f2fcab5dbcce8b",
+      "last_queued_at": "2025-11-17T00:46:42.094666+00:00",
+      "queued_count": 2
+    },
+    {
+      "id": "human-task-control-plane-credential-bundle",
+      "title": "Stage control-plane credential bundle for pairing",
+      "description": "Operators need Cloudflare tunnel certs, nghtshft.ai API keys, and Monday tokens ready before the pairing workflow can ship.",
+      "dependencies": [],
+      "prompt": "Before provisioning secrets, re-read ROADMAP.md (Phase 0.4/1.4), roadmap_updates.md \u00a7\u00a71-2, and docs/upgrade_plan.json. Gather or refresh the Cloudflare tunnel credentials, nghtshft.ai control-plane API tokens, and Monday sandbox tokens the pairing bootstrap will request; store them in the operator vault and the ~/.config/systemd env files Nightshift loads. Any prompt or Human Task you queue must appear in both data/prompts.json (or an /api/prompts response) and logs/progress.log\u2014record each ID plus the verification evidence (file path + timestamp) inside logs/progress.log and in your final response, and make sure every follow-up inherits this re-read + verification requirement before work begins.",
+      "project_id": "nightshift",
+      "priority": 0,
+      "status": "pending",
+      "queued_count": 0,
+      "last_prompt_id": null,
+      "last_queued_at": null,
+      "notes": "Human Task: ops gather control-plane + tunnel credentials so pairing can proceed."
+    },
+    {
+      "id": "agent-identity-control-plane-bootstrap",
+      "title": "Bootstrap the control-plane pairing and agent identity flow",
+      "description": "Implement the ROADMAP Phase 0.4 / 1.4 requirements so every Nightshift instance bootstraps from the nghtshft.ai control plane with a canonical agent identity.",
+      "dependencies": [
+        "short-term-roadmap-plan",
+        "human-task-control-plane-credential-bundle"
+      ],
+      "prompt": "Before touching code, re-read ROADMAP.md (Phase 0.4 + 1.4), roadmap_updates.md \u00a7\u00a71-2, and docs/upgrade_plan.json so you inherit the latest constraints. Implement the nghtshft.ai control-plane pairing flow end-to-end: define config/agent_identity.yml, emit the pairing-code UI/log experience that blocks startup until POST /register-agent succeeds, fetch + persist the identity/tunnel bundle via GET /agent/:id/config, and surface the metadata inside the queue header and environment directory with operator docs + smoke tests. Any prompt or Human Task you queue while doing this must be verified in both data/prompts.json (or /api/prompts) and logs/progress.log\u2014record each ID plus the verification evidence (file path + timestamp) inside logs/progress.log and your final response, and require every follow-up you spawn to repeat this re-read + verification checklist before executing.",
+      "project_id": "nightshift",
+      "priority": 0,
+      "status": "completed",
+      "queued_count": 1,
+      "last_prompt_id": "b4295c7aab2049b2a0e4f94fcb8f7315",
+      "last_queued_at": "2025-11-17T08:56:10.565006+00:00",
+      "completed_at": "2025-11-17T09:06:05+00:00",
+      "notes": "Delivered agent identity manager, pairing code UX/logging, /register-agent handler, config/agent_identity.yml template, GET /agent/:id/config sync, and operator smoke tests."
+    },
+    {
+      "id": "monday-ingestion-sync",
+      "title": "Wire Monday.com prompts + blocker sync into Nightshift",
+      "description": "Kick off the Phase 2.5 PM integration so Monday boards become first-class prompt sources with bi-directional status + blocker sync.",
+      "dependencies": [
+        "agent-identity-control-plane-bootstrap",
+        "human-task-monday-board-access"
+      ],
+      "prompt": "Re-read ROADMAP.md (Phase 2.5), roadmap_updates.md \u00a73, docs/upgrade_plan.json, and the newest logs/progress.log entries describing PM sync expectations. Implement the first Monday integration slice: model data/pm_integrations.json, build the daemon/webhook that turns assigned Monday items into queue prompts, mirror status/comments/environment links back to Monday, and sync Human Tasks bi-directionally. While doing this, verify every prompt or Human Task you queue appears in both data/prompts.json (or /api/prompts) and logs/progress.log, record the IDs plus verification evidence (file path + timestamp) inside logs/progress.log and your final response, and ensure follow-up work keeps re-reading these planning docs and propagates the verification checklist before running.",
+      "project_id": "nightshift",
+      "priority": 1,
+      "status": "queued",
+      "queued_count": 0,
+      "last_prompt_id": null,
+      "last_queued_at": null
+    },
+    {
+      "id": "human-task-monday-board-access",
+      "title": "Provision Monday sandbox board + API access",
+      "description": "Operators must supply the Monday board ID, column mappings, webhook URL, and API token before the integration daemon can run.",
+      "dependencies": [],
+      "prompt": "Before granting access, re-read ROADMAP.md (Phase 2.5), roadmap_updates.md \u00a73, and docs/upgrade_plan.json. Create or select a Monday sandbox board for Nightshift, document the item/column IDs that map to prompt metadata, generate an API token + webhook target, and place the credentials in the operator vault plus Nightshift secret files. Any prompt or Human Task you create while doing this must show up in both data/prompts.json (or the /api/prompts response) and logs/progress.log; record the IDs and verification evidence (file path + timestamp) inside logs/progress.log and your final response, and propagate these planning/verification steps to all follow-ups.",
+      "project_id": "nightshift",
+      "priority": 1,
+      "status": "pending",
+      "queued_count": 0,
+      "last_prompt_id": null,
+      "last_queued_at": null,
+      "notes": "Human Task: coordinate Monday API creds + board metadata."
+    },
+    {
+      "id": "queue-metrics-watchdog",
+      "title": "Guarantee FIFO queue observability across UI + logs",
+      "description": "Finalize the queue ordering/visibility story so operators can trust the Task Queue state after the workspace layout changes.",
+      "dependencies": [
+        "restore-queue-backend-ordering",
+        "upgrade-queue-metrics"
+      ],
+      "prompt": "Begin by re-reading ROADMAP.md (Phase 2.4 queue watchlist), roadmap_updates.md \u00a7\u00a74-5, docs/upgrade_plan.json, and the queue regression entries in logs/progress.log so you understand the drift. Build the watchdog that confirms PromptStore FIFO ordering, extends /api/health + the frontend status widgets with per-status counts/ages, and logs explicit queue verification records (IDs, timestamps, evidence paths) whenever prompts are enqueued. Every prompt or Human Task you add while doing this must be double-checked in data/prompts.json (or /api/prompts) and logs/progress.log; record the IDs plus verification evidence (file path + timestamp) inside logs/progress.log and your final response, and propagate this planning/verification requirement to any follow-ups you spawn.",
+      "project_id": "nightshift",
+      "priority": 1,
+      "status": "queued",
+      "queued_count": 0,
+      "last_prompt_id": null,
+      "last_queued_at": null
+    },
+    {
+      "id": "queue-fifo-audit-playbook",
+      "title": "Document the FIFO queue audit playbook",
+      "description": "Operators need a repeatable checklist to prove queue ordering and capture evidence whenever regressions appear.",
+      "dependencies": [
+        "queue-metrics-watchdog"
+      ],
+      "prompt": "Re-read ROADMAP.md (Phase 2.4 watchlist), roadmap_updates.md \u00a7\u00a74-5, docs/upgrade_plan.json, and the latest queue drift entries in logs/progress.log. Turn the instrumentation from queue-metrics-watchdog into a documented playbook: CLI/API steps to capture FIFO evidence, how to log verification snapshots, and how to escalate anomalies back into prompts or Human Tasks. Every prompt or Human Task you add while writing this playbook must appear in both data/prompts.json (or /api/prompts) and logs/progress.log; record the IDs plus verification evidence (file path + timestamp) in logs/progress.log and your final response, and ensure all follow-up work propagates these re-read + verification requirements.",
+      "project_id": "nightshift",
+      "priority": 2,
+      "status": "queued",
+      "queued_count": 0,
+      "last_prompt_id": null,
+      "last_queued_at": null,
+      "notes": "Prompt: produce the operator runbook once instrumentation is available."
+    },
+    {
       "id": "upgrade-queue-metrics",
       "title": "Expose richer queue metrics across the stack",
       "description": "Return per-status counts, oldest/newest timestamps, and rolling duration stats so the UI can visualize queue health trends.",
@@ -300,5 +406,5 @@
       "status": "pending"
     }
   ],
-  "generated_at": "2025-11-16T17:51:36.407040+00:00"
+  "generated_at": "2025-11-17T00:51:15+00:00"
 }

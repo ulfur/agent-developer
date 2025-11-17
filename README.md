@@ -20,10 +20,21 @@ Nightshift is an autonomous, multi-agent development environment that keeps a Ra
 - **Storage** – JSON stores in `data/` (`prompts.json`, `human_tasks.json`, `environments.json`) plus generated router YAML under `data/router/`. Prompt transcripts live in `logs/prompt_<id>.log` with a rolling operational feed at `logs/progress.log`.
 
 ## Control Plane & Agent Identity
-- Every device/cloud instance pairs with `nghtshft.ai` on first boot: the backend prints a one-time pairing code, the operator claims it in the control-plane UI, and the server writes `config/agent_identity.yml` plus the Cloudflare tunnel credentials it receives back from `POST /register-agent`.
-- The identity blob includes Agent ID, friendly name, allowed repos/workspaces, PM tool tokens, Cloudflare hostname (`<agent>.nghtshft.ai`), and preferred ModelDriver. Agents refuse to process prompts until the file exists and the tunnel heartbeat passes.
+- Every device/cloud instance pairs with `nghtshft.ai` on first boot: the backend prints a one-time pairing code (now surfaced in the login view, queue header, and `logs/progress.log`), the operator claims it in the control-plane UI, and the server writes `config/agent_identity.yml` plus the Cloudflare tunnel credentials it receives back from `POST /register-agent`. Never edit this file by hand—re-run the pairing flow if something changes.
+- The identity blob includes Agent ID, friendly name, allowed repos/workspaces, PM tool tokens, Cloudflare hostname (`<agent>.nghtshft.ai`), and preferred ModelDriver. Agents refuse to process prompts until the file exists and the tunnel heartbeat passes, and operators can see the resolved metadata (hostname, agent ID, control-plane status) via the queue header chip, the workspace directory banner, and the `/api/agent/identity` endpoint.
 - Monday.com (Jira/Linear coming soon) is the first PM integration: the daemon/webhook maps board items to prompts, updates status/comments as Nightshift progresses, and synchronizes Human Tasks both directions so blockers remain visible to operators regardless of the UI they use.
 - Operators manage agents (pause/resume, prompt replay, pairing) through the control-plane dashboard; when offline, the device falls back to LAN-only mode but logs the degraded state in `logs/progress.log`.
+- To refresh credentials manually, sign in and `POST /api/agent/identity/sync` (or click **Refresh identity** in the workspace panel). The backend automatically fetches `GET /agent/:id/config` on startup and records sync failures as pairing reminders in both the UI and `logs/progress.log`.
+
+### Pairing workflow & smoke tests
+Use these CLI checks to exercise the headless pairing path before exposing a device to operators:
+
+1. Start `python3 backend/server.py` and watch `logs/progress.log` for `Awaiting control-plane pairing` entries plus the one-time code. The login card also shows the same code until pairing completes.
+2. Confirm the pairing payload via `curl http://127.0.0.1:8080/api/agent/identity` (returns `{"status":"pairing","pairing_code":...}`) and ensure the queue header chip reflects the degraded state.
+3. Simulate the control plane claiming the device by posting a bundle to `POST http://127.0.0.1:8080/register-agent` (see `config/agent_identity.yml` for the canonical schema). On success the backend writes the file, logs the pairing event, and the UI flips to the resolved agent metadata.
+4. Verify the persisted identity with `curl http://127.0.0.1:8080/api/agent/identity` (status `paired`) and by inspecting `config/agent_identity.yml`. This also unblocks the prompt worker, so queued prompts will begin executing.
+5. Trigger a remote config refresh via `curl -X POST -H "Authorization: Bearer <session>" http://127.0.0.1:8080/api/agent/identity/sync` (or the **Refresh identity** UI button) to exercise the `GET /agent/:id/config` handshake. Failures are logged and surfaced in the queue header chip.
+6. Keep the `human-task-control-plane-credential-bundle` entry in `data/human_tasks.json` updated—operators working that blocker supply the Cloudflare tunnel certs, nghtshft.ai API tokens, and Monday sandbox secrets that the pairing flow expects. If those secrets drift, queue a follow-up Human Task (and verify it lands in both the JSON store and `logs/progress.log`).
 
 ## Quick Start
 ### Bare-metal (Pi OS Lite or Linux)

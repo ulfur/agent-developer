@@ -33,6 +33,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from auth import AuthManager, AuthenticatedUser
+from agent_identity import AgentIdentityError, AgentIdentityManager
 from eink.it8591 import IT8591Config, IT8951_ROTATE_180
 try:  # optional git discipline helper (may not exist on deployments)
     from git_branching import GitBranchError, PromptBranchDiscipline  # type: ignore
@@ -60,6 +61,9 @@ PREFERENCES_PATH = DATA_DIR / "preferences.json"
 ROUTER_STATE_DIR = DATA_DIR / "router"
 ROUTER_DYNAMIC_CONFIG = ROUTER_STATE_DIR / "environments.yml"
 ROUTER_CERTS_DIR = ROUTER_STATE_DIR / "certs"
+CONFIG_DIR = REPO_ROOT / "config"
+AGENT_IDENTITY_PATH = CONFIG_DIR / "agent_identity.yml"
+PAIRING_STATE_PATH = CONFIG_DIR / "pairing_state.json"
 APP_CONTEXT: Dict[str, Any] = {}
 PROMPT_DURATION_WINDOW = 50
 PROMPT_STATUS_SERVER_RESTARTING = "server_restarting"
@@ -123,7 +127,7 @@ def seconds_since(timestamp: Optional[str]) -> Optional[float]:
 
 
 def ensure_dirs() -> None:
-    for path in (DATA_DIR, LOG_DIR, FRONTEND_DIR, PROJECTS_DIR, ROUTER_STATE_DIR, ROUTER_CERTS_DIR):
+    for path in (DATA_DIR, LOG_DIR, FRONTEND_DIR, PROJECTS_DIR, ROUTER_STATE_DIR, ROUTER_CERTS_DIR, CONFIG_DIR):
         path.mkdir(parents=True, exist_ok=True)
 
 
@@ -2167,6 +2171,10 @@ class PromptWorker(threading.Thread):
 
     def run(self) -> None:
         while not self._stop_event.is_set():
+            identity_manager: Optional[AgentIdentityManager] = APP_CONTEXT.get("identity")
+            if identity_manager and not identity_manager.is_paired():
+                time.sleep(1)
+                continue
             prompt_id = self.store.next_prompt_id()
             if not prompt_id:
                 continue
@@ -2600,6 +2608,7 @@ class EventStreamer:
         project_registry: Optional[ProjectRegistry] = None,
         human_tasks: Optional[HumanTaskStore] = None,
         environments: Optional[EnvironmentStore] = None,
+        identity: Optional[AgentIdentityManager] = None,
     ):
         self.store = store
         self.logger = logger
@@ -2607,6 +2616,7 @@ class EventStreamer:
         self.project_registry = project_registry
         self.human_tasks = human_tasks
         self.environments = environments
+        self.identity_manager = identity
 
     def broadcast_queue(self, targets: Optional[Iterable[WebSocketConnection]] = None) -> None:
         snapshot = self.store.list_prompts()
@@ -2645,6 +2655,8 @@ class EventStreamer:
                 "environments": environment_metrics,
             },
         }
+        if self.identity_manager:
+            payload["identity"] = self.identity_manager.public_payload()
         self.ws_manager.broadcast("health", payload, targets=targets)
 
     def send_initial_state(self, connection: WebSocketConnection) -> None:
@@ -2714,6 +2726,10 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802
+        clean_path = self.path.split("?", 1)[0].rstrip("/") or "/"
+        if clean_path == "/register-agent":
+            self._handle_agent_registration()
+            return
         if self.path.startswith("/api/"):
             self._handle_api_post()
         else:
@@ -2744,6 +2760,11 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 payload = {"projects": [], "default_project_id": None}
             self._write_json(payload)
             return
+        if clean_path == "/api/agent/identity":
+            identity_manager: Optional[AgentIdentityManager] = APP_CONTEXT.get("identity")
+            payload = identity_manager.public_payload() if identity_manager else {"status": "unknown"}
+            self._write_json(payload)
+            return
         if not self._require_auth():
             return
         if clean_path == "/api/health":
@@ -2760,6 +2781,9 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 "metrics": {**metrics, "human_tasks": human_metrics, "environments": environment_metrics},
                 "user": APP_CONTEXT["auth"].user_payload(self.current_user) if self.current_user else None,
             }
+            identity_manager: Optional[AgentIdentityManager] = APP_CONTEXT.get("identity")
+            if identity_manager:
+                payload["identity"] = identity_manager.public_payload()
             self._write_json(payload)
         elif clean_path == "/api/prompts":
             payload = APP_CONTEXT["store"].list_prompts()
@@ -2838,6 +2862,21 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             self._handle_login()
             return
         if not self._require_auth():
+            return
+        if clean_path == "/api/agent/identity/sync":
+            identity_manager: Optional[AgentIdentityManager] = APP_CONTEXT.get("identity")
+            if not identity_manager:
+                self._write_json({"error": "identity manager unavailable"}, status=503)
+                return
+            try:
+                refreshed = identity_manager.refresh_remote_config()
+            except AgentIdentityError as exc:
+                self._write_json({"error": str(exc)}, status=400)
+                return
+            events = APP_CONTEXT.get("events")
+            if events:
+                events.broadcast_health()
+            self._write_json({"refreshed": bool(refreshed)})
             return
         if clean_path == "/api/prompts":
             length = int(self.headers.get("Content-Length", 0))
@@ -3383,6 +3422,37 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
         else:
             self._write_json({"error": "unknown endpoint"}, status=404)
 
+    def _handle_agent_registration(self) -> None:
+        identity_manager: Optional[AgentIdentityManager] = APP_CONTEXT.get("identity")
+        if not identity_manager:
+            self._write_json({"error": "identity manager unavailable"}, status=503)
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+        try:
+            payload = json.loads(body or b"{}")
+        except json.JSONDecodeError:
+            self._write_json({"error": "invalid json"}, status=400)
+            return
+        try:
+            bundle = identity_manager.accept_registration(payload)
+        except AgentIdentityError as exc:
+            self._write_json({"error": str(exc)}, status=400)
+            return
+        audit_logger: Optional[logging.Logger] = APP_CONTEXT.get("audit_logger")
+        agent_record = (bundle or {}).get("agent") or {}
+        if audit_logger:
+            audit_logger.info(
+                "Control plane paired agent %s (%s)",
+                agent_record.get("name") or agent_record.get("id"),
+                agent_record.get("id"),
+            )
+        events = APP_CONTEXT.get("events")
+        if events:
+            events.broadcast_health()
+        schedule_display_refresh("identity-registered")
+        self._write_json({"status": "ok", "agent": agent_record})
+
     def _handle_login(self) -> None:
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length)
@@ -3543,6 +3613,13 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
     preferred_project = os.environ.get("DEFAULT_PROJECT_ID")
     project_registry = ProjectRegistry(PROJECTS_DIR, preferred_project)
     audit_logger = configure_logging()
+    identity_manager = AgentIdentityManager(
+        AGENT_IDENTITY_PATH,
+        PAIRING_STATE_PATH,
+        logger=audit_logger,
+        control_plane_base_url=os.environ.get("CONTROL_PLANE_API_BASE"),
+        pairing_instructions_url=os.environ.get("CONTROL_PLANE_PAIRING_URL"),
+    )
     store = PromptStore(PROMPT_DB_PATH, project_registry)
     human_task_store = HumanTaskStore(HUMAN_TASK_DB_PATH, project_registry)
     environment_store = EnvironmentStore(ENVIRONMENT_DB_PATH, project_registry)
@@ -3562,6 +3639,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         project_registry,
         human_task_store,
         environment_store,
+        identity=identity_manager,
     )
     ws_manager.event_streamer = events
     recovered_prompt_ids = store.consume_recovered_prompts()
@@ -3580,6 +3658,21 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         logger=audit_logger,
     )
     router_manager.start()
+
+    if identity_manager.is_paired():
+        try:
+            identity_manager.refresh_remote_config()
+        except AgentIdentityError as exc:
+            audit_logger.warning("Control plane sync skipped: %s", exc)
+    else:
+        pairing = identity_manager.public_payload()
+        code = pairing.get("pairing_code")
+        if code:
+            audit_logger.info(
+                "Awaiting control-plane pairing. Visit %s and enter code %s.",
+                pairing.get("instructions_url"),
+                code,
+            )
 
     runner = CodexRunner(REPO_ROOT, events, audit_logger)
     display_manager = start_display_manager(store, audit_logger, preference_store, human_task_store)
@@ -3603,6 +3696,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         "projects": project_registry,
         "preferences": preference_store,
         "router_manager": router_manager,
+        "identity": identity_manager,
     }
     if recovered_prompt_ids:
         schedule_display_refresh("recovered prompts")

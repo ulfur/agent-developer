@@ -36,7 +36,9 @@
 - Systemd unit: `~/.config/systemd/user/nightshift.service` keeps the backend running. After editing the unit or env file, run `systemctl --user daemon-reload` and restart the service.
 
 ### Prompt lifecycle & queue tooling
+- The queue composer now surfaces "Quick Prompt Templates" for common operations (restarts, plan maintenance, queueing plan tasks, committing/pushing work, adding workspaces, etc.). Selecting one pre-fills the detailed instruction block so we stay consistent about verification steps and references - edit as needed before sending.
 - Prompts enter via `POST /api/prompts` (`{"prompt": "...", "project_id": "..."}`) after authentication. States: `queued` → `running` → `completed` / `failed` / `canceled`.
+- After queueing or retrying a prompt (or creating a Human Task), immediately confirm it exists in both `data/prompts.json`/`data/human_tasks.json` and `logs/progress.log` (or the `/api/prompts`/`/api/human-tasks` responses). Do not state that anything was queued until you can cite the prompt/task ID plus the verification evidence in `logs/progress.log` and your final response, and make sure any prompt you create passes those same verification/recursion rules forward.
 - Operators can edit queued prompts (`PUT /api/prompts/<id>`), delete them, or retry (`POST /api/prompts/<id>/retry`).
 - `scripts/enqueue_prompt.py` is a CLI helper for enqueueing prompts or retries directly from SSH; it accepts env vars for host, auth credentials, and project id.
 - Queue snapshots (`GET /api/prompts` or the `queue_snapshot` WebSocket payload) now return queued items FIFO by `enqueued_at`, running (including `server_restarting`) ordered by `started_at`, and terminal entries afterward. The `status_buckets` map annotates IDs/counts per status, and each active prompt exposes a `queue_position` so the UI badges mirror the true worker order.

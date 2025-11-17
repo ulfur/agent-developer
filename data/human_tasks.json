@@ -1,4 +1,16 @@
 {
+  "human-task-control-plane-credential-bundle": {
+    "task_id": "human-task-control-plane-credential-bundle",
+    "title": "Stage control-plane credential bundle for pairing",
+    "description": "Gather the Cloudflare tunnel certs, nghtshft.ai API tokens, and Monday sandbox tokens the pairing bootstrap uses. Place the bundle in the operator vault + ~/.config/systemd env files so the backend can hand them to POST /register-agent when pairing completes.",
+    "status": "open",
+    "blocking": true,
+    "project_id": "nightshift",
+    "prompt_id": null,
+    "created_at": "2025-11-17T09:06:05+00:00",
+    "updated_at": "2025-11-17T09:06:05+00:00",
+    "resolved_at": null
+  },
   "env-task-dns-nebulapulse": {
     "task_id": "env-task-dns-nebulapulse",
     "title": "Provision DNS/TLS for preview.nebulapulse.local",

@@ -115,7 +115,6 @@ class EnvironmentStore:
                     continue
                 self._records[record.environment_id] = record
                 self._slug_index[record.slug] = record.environment_id
-            self._revision += 1
 
     def _persist(self) -> None:
         with self._lock:

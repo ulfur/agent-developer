@@ -13,11 +13,14 @@ These instructions apply to every prompt, regardless of which project is current
 - Start with the selected project’s own `context.md`/`agents.md` and only branch out to shared docs when they explicitly apply.
 - When you are working on Nightshift (`nightshift`), also review `the_project.txt` and the repo `README.md` so platform-wide expectations stay fresh.
 - Nightshift now maintains a supplemental planning file `roadmap_updates.md` (ignored by git). When a prompt targets Nightshift itself, read both ROADMAP.md and that file so new control-plane and hardware directives get reflected in your work.
+- Treat `docs/upgrade_plan.json` as part of the required reading whenever you touch planning, queue health, or roadmap work. It captures the structured backlog, so reference it before creating or editing prompts and quote it (plus the roadmap docs) in your log summaries.
 - Keep project-specific facts inside that project’s folder so guidance stays scoped. If you find general expectations that apply to everyone, update this shared file instead.
 - Summarize each attempt in `logs/progress.log`. Include the prompt intent, key edits, skipped verifications, and remaining questions so future operators inherit context.
+- Whenever you queue prompts or human tasks, confirm they exist in both the canonical store (`data/prompts.json` or `data/human_tasks.json`) and `logs/progress.log` before declaring success. Record the IDs alongside the verification evidence in that log and reiterate it in your final response so nobody has to guess whether the queue update stuck.
 
 ## Agent identity & platforms
 - Every device/cloud instance must pair with the nghtshft.ai control plane before touching repos. The backend writes `config/agent_identity.yml` after a successful `POST /register-agent`. Do not hand-edit this file; if it is missing or stale, stop and queue a Human Task so operators can re-pair the device.
+- The queue header chip, workspace directory banner, and `/api/agent/identity` response always show which agent you are piloting (name, ID, Cloudflare hostname, control-plane sync status). Use the frontend **Refresh identity** action (or `POST /api/agent/identity/sync`) whenever you need to pull a fresh bundle from nghtshft.ai.
 - The identity blob defines Agent ID, friendly name, repo/workspace permissions, PM tokens, Cloudflare hostname, and preferred ModelDriver. Honor those settings (e.g., never access repos outside the `allow` list even if the filesystem permits it).
 - Track which hardware form factor you are running on (E-ink Pi, Touchscreen Pi, or Cloud agent). Log hardware-specific blockers (battery, display firmware, GPU quotas, etc.) as Human Tasks so other operators can service the affected device without guessing.
 - Cloudflare tunnels are mandatory whenever the agent is reachable outside the LAN. If the tunnel heartbeat fails, log it in `logs/progress.log`, flip the dashboard chip to degraded, and only keep working if the prompt explicitly allows offline mode.
@@ -58,7 +61,7 @@ These instructions apply to every prompt, regardless of which project is current
 - Prompt `335722ec9e05482f943fa1cd1ab7f859` is queued to diagnose why prompts are currently processed/displayed in FILO order. When you enqueue or triage prompts, record the `queue_position` values from `/api/prompts` alongside timestamps in `logs/progress.log` so we have evidence showing whether the bug reproduces.
 
 ### Prompt queue checklist (do this every time you add work)
-1. Re-read `ROADMAP.md` and any plan docs for the active project so the new prompt references the latest priorities and explicitly instructs future agents to keep doing the same (e.g., “start by reading ROADMAP.md”).
+1. Re-read `ROADMAP.md`, `roadmap_updates.md`, and the project’s plan docs (e.g., `docs/upgrade_plan.json`) so the new prompt references the latest priorities and explicitly instructs future agents to keep doing the same (e.g., “start by re-reading the planning docs before acting”).
 2. Draft the task in `docs/upgrade_plan.json` (preferred) or directly in `data/prompts.json`. Include:
    - `project_id`, `priority`, and a prompt body that states the verification expectations and that follow-up tasks are allowed.
    - Status `pending` inside the plan file; set to `queued` only after the prompt is actually enqueued.
@@ -68,6 +71,7 @@ These instructions apply to every prompt, regardless of which project is current
    - Tail `logs/progress.log` (or use `rg -n "Queued prompt <prompt_id>" logs/progress.log`) to confirm the backend logged the enqueue event.
    - Append a note to `logs/progress.log` that lists the new prompt IDs and how you confirmed them.
 5. Mention the queued prompt IDs in your user response (with file+line references) so the operator can double-check quickly, and remind the next agent they may create follow-up prompts.
+6. Bake explicit recursion into every new prompt: tell the assignee to (a) re-read the planning docs before acting, (b) verify that any follow-up tasks they queue are actually persisted in both `data/prompts.json` and `logs/progress.log`, and (c) carry these instructions forward to whoever they hand work to next.
 
 ### Human Tasks (blockers)
 - Any time a prompt is blocked on external answers, credentials, or physical work, log it in the Human Tasks queue so the operator knows what to unblock. Use the CLI helper from the repo root:
