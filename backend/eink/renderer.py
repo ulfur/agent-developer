@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import random
 import socket
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+import textwrap
 
 
 TITLE_FONT_CANDIDATES = (
-    # Prefer lighter weights so the header reads softer on the e-ink panel.
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -20,10 +21,10 @@ TITLE_FONT_CANDIDATES = (
 )
 
 SUBTITLE_FONT_CANDIDATES = (
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 )
 
 BODY_FONT_CANDIDATES = (
@@ -55,6 +56,13 @@ def pick_header_subtitle(previous: str | None = None) -> str:
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+ASSET_FONT_DIR = PROJECT_ROOT / "backend" / "assets" / "fonts"
+ICON_FONT_CANDIDATES = (
+    str(ASSET_FONT_DIR / "materialdesignicons-webfont.ttf"),
+    str(ASSET_FONT_DIR / "MaterialIcons-Regular.ttf"),
+    "/usr/share/fonts/truetype/material-design-icons/MaterialIcons-Regular.ttf",
+)
+ICON_CODEPOINTS_PATH = ASSET_FONT_DIR / "mdi-battery-codepoints.json"
 HEADER_ICON_VARIANTS = {
     "dark": PROJECT_ROOT / "frontend" / "nightshift-header-dark.png",
     "light": PROJECT_ROOT / "frontend" / "nightshift-header-light.png",
@@ -75,11 +83,14 @@ class StatusRenderer:
         self._subtitle_font = self._load_font(size=subtitle_size, candidates=SUBTITLE_FONT_CANDIDATES)
         self._subtitle_text = pick_header_subtitle()
         self._subtitle_gap = max(8, self._subtitle_font.size // 4)
-        self._body_font = self._load_font(size=46, candidates=BODY_FONT_CANDIDATES)
+        self._body_font = self._load_font(size=48, candidates=BODY_FONT_CANDIDATES)
+        self._icon_font = self._load_icon_font(size=max(64, int(self._body_font.size * 1.75)))
+        self._icon_glyphs = self._load_icon_codepoints()
         logo_size = int(self._title_font.size * HEADER_ICON_BASE_SCALE * HEADER_ICON_ENLARGE_FACTOR)
         self._header_logos = self._load_header_logos(logo_size)
         self._logo_text_gap = max(12, logo_size // 6)
-        self._margin = 56
+        self._margin = 46
+        self._top_margin = max(0, self._margin - 30)
         self._text_x = self._margin
         self._detail_indent = "   "
         self._detail_line_count = 3
@@ -87,7 +98,7 @@ class StatusRenderer:
         indent_width = self._measure_text(self._detail_indent)
         self._max_detail_width = max(60, available_width - int(indent_width))
         self._line_spacing = self._body_font.size + 6
-        self._footer_font = self._load_font(size=40, candidates=BODY_FONT_CANDIDATES)
+        self._footer_font = self._load_font(size=44, candidates=BODY_FONT_CANDIDATES)
         self._footer_margin = max(18, self._margin // 3)
 
     def render(
@@ -97,14 +108,15 @@ class StatusRenderer:
         invert: bool = False,
         pending_count: int | None = None,
         human_notification_count: int | None = None,
+        power_status: Mapping[str, Any] | None = None,
     ) -> Image.Image:
         """Return a greyscale PIL image containing queue metadata."""
         canvas = Image.new("L", (self.width, self.height), color=0xFF)
         draw = ImageDraw.Draw(canvas)
-        y = self._margin
+        y = self._top_margin
         footer_space = self._footer_margin + self._footer_font.size
         footer_block_top = self.height - footer_space
-        content_bottom = max(self._margin + self._body_font.size, footer_block_top - 10)
+        content_bottom = max(self._top_margin + self._body_font.size, footer_block_top - 10)
 
         self._subtitle_text = pick_header_subtitle(self._subtitle_text)
 
@@ -115,6 +127,7 @@ class StatusRenderer:
             invert,
             pending_count=pending_count,
             human_notification_count=human_notification_count,
+            power_status=power_status,
         )
 
         human_count = 0
@@ -161,6 +174,173 @@ class StatusRenderer:
             canvas = ImageOps.invert(canvas)
 
         return canvas
+
+    def render_with_sections(
+        self,
+        entries: Sequence[Mapping[str, str]],
+        *,
+        invert: bool = False,
+        pending_count: int | None = None,
+        human_notification_count: int | None = None,
+        power_status: Mapping[str, Any] | None = None,
+    ) -> tuple[Image.Image, dict[str, tuple[Image.Image, tuple[int, int, int, int]]]]:
+        canvas = self.render(
+            entries,
+            invert=invert,
+            pending_count=pending_count,
+            human_notification_count=human_notification_count,
+            power_status=power_status,
+        )
+        sections = self._extract_section_images(canvas)
+        return canvas, sections
+
+    def render_overlay(
+        self,
+        title: str,
+        lines: Sequence[str],
+        invert: bool = False,
+    ) -> tuple[Image.Image, tuple[int, int, int, int]]:
+        canvas = Image.new("L", (self.width, self.height), color=0xFF)
+        draw = ImageDraw.Draw(canvas)
+
+        window_height = max(int(self.height * 0.4), self._title_font.size * 3)
+        window_width = max(int(self.width * 0.4), self._text_x * 2)
+        window_width = min(window_width, self.width - 2 * self._margin)
+        window_height = min(window_height, self.height - 2 * self._margin)
+        window_x = max(self._margin, (self.width - window_width) // 2)
+        window_y = max(self._margin, (self.height - window_height) // 2)
+        window_x, window_width = self._align_horizontal_bounds(window_x, window_width)
+        bounds = (window_x, window_y, window_width, window_height)
+
+        border_radius = 20
+        border_rect = [window_x, window_y, window_x + window_width, window_y + window_height]
+        draw.rounded_rectangle(border_rect, radius=border_radius, outline=0x00, width=4, fill=0xFF)
+
+        inner_margin = 24
+        text_x = window_x + inner_margin
+        text_y = window_y + inner_margin
+        text_width = window_width - 2 * inner_margin
+
+        draw.text((text_x, text_y), title, font=self._title_font, fill=0x00)
+        text_y += self._title_font.size + 16
+
+        wrapped_lines: list[str] = []
+        for line in lines:
+            wrapped_lines.extend(self._wrap_text(line, self._body_font, text_width))
+        for line in wrapped_lines:
+            if text_y + self._body_font.size > window_y + window_height - inner_margin:
+                break
+            draw.text((text_x, text_y), line, font=self._body_font, fill=0x00)
+            text_y += self._body_font.size + 10
+
+        if invert:
+            canvas = ImageOps.invert(canvas)
+        return canvas, bounds
+
+    def _align_horizontal_bounds(self, x: int, width: int) -> tuple[int, int]:
+        start = max(self._margin, x)
+        end = min(self.width - self._margin, start + width)
+        aligned_start = (start // 4) * 4
+        aligned_end = ((end + 3) // 4) * 4
+        aligned_start = max(self._margin, aligned_start)
+        aligned_end = min(self.width - self._margin, aligned_end)
+        if aligned_end <= aligned_start:
+            aligned_end = min(self.width - self._margin, aligned_start + 4)
+        # keep the window centred by shifting equally when possible
+        desired = width
+        current = aligned_end - aligned_start
+        if current < desired:
+            deficit = desired - current
+            shift_left = min(deficit // 2, aligned_start - self._margin)
+            aligned_start -= shift_left
+            aligned_end = min(self.width - self._margin, aligned_start + desired)
+            remainder = (aligned_end - aligned_start) % 4
+            if remainder:
+                aligned_end = min(self.width - self._margin, aligned_end + (4 - remainder))
+        return aligned_start, aligned_end - aligned_start
+
+    def render_shutdown_frame(self) -> Image.Image:
+        """Return an all-black frame with the Nightshift mark centered."""
+        canvas = Image.new("L", (self.width, self.height), color=0x00)
+        logo = self._select_shutdown_logo()
+        if logo:
+            logo_bitmap = logo.copy()
+            max_side = int(min(self.width, self.height) * 0.65)
+            if max_side > 0:
+                logo_bitmap.thumbnail((max_side, max_side), Image.LANCZOS)
+            x = max(0, (self.width - logo_bitmap.width) // 2)
+            y = max(0, (self.height - logo_bitmap.height) // 2)
+            canvas.paste(logo_bitmap, (x, y))
+        return canvas
+
+    def _extract_section_images(
+        self, canvas: Image.Image
+    ) -> dict[str, tuple[Image.Image, tuple[int, int, int, int]]]:
+        boxes = self._compute_section_boxes()
+        crops: dict[str, tuple[Image.Image, tuple[int, int, int, int]]] = {}
+        for name, box in boxes.items():
+            x, y, w, h = box
+            if w <= 0 or h <= 0:
+                continue
+            region = canvas.crop((x, y, x + w, y + h))
+            crops[name] = (region, box)
+        return crops
+
+    def _compute_section_boxes(self) -> dict[str, tuple[int, int, int, int]]:
+        boxes: dict[str, tuple[int, int, int, int]] = {}
+        content_width = self.width - (2 * self._margin)
+        header_height = self._align_span(self._title_font.size + max(self._subtitle_font.size, 32) + 24)
+        footer_height = self._align_span(self._footer_font.size + 24)
+        header_left_width = self._align_span(int(content_width * 0.6))
+        header_right_width = self._align_span(content_width - header_left_width)
+        header_top = self._top_margin
+        header_left_box = self._align_box(self._margin, header_top, header_left_width, header_height)
+        header_right_box = self._align_box(
+            self._margin + header_left_width,
+            header_top,
+            header_right_width,
+            header_height,
+        )
+        body_top = header_top + header_height + 12
+        footer_top = self.height - footer_height - self._footer_margin
+        body_height = max(4, footer_top - body_top - 12)
+        body_box = self._align_box(self._margin, body_top, content_width, body_height)
+        footer_left_box = self._align_box(self._margin, footer_top, header_left_width, footer_height)
+        footer_right_box = self._align_box(
+            self._margin + header_left_width,
+            footer_top,
+            header_right_width,
+            footer_height,
+        )
+        boxes["header_left"] = header_left_box
+        boxes["header_right"] = header_right_box
+        boxes["body"] = body_box
+        boxes["footer_left"] = footer_left_box
+        boxes["footer_right"] = footer_right_box
+        return boxes
+
+    def _align_span(self, value: int) -> int:
+        if value <= 0:
+            return 4
+        remainder = value % 4
+        if remainder == 0:
+            return value
+        return value + (4 - remainder)
+
+    def _align_box(self, x: int, y: int, w: int, h: int) -> tuple[int, int, int, int]:
+        x = max(0, x - (x % 4))
+        y = max(0, y - (y % 4))
+        w = max(4, w)
+        h = max(4, h)
+        x2 = min(self.width, x + w)
+        y2 = min(self.height, y + h)
+        w = max(4, x2 - x)
+        h = max(4, y2 - y)
+        if w % 4:
+            w -= w % 4
+        if h % 4:
+            h -= h % 4
+        return x, y, w, h
 
     # ----------------------------------------------------------------- helpers
     def _format_entry(self, idx: int, record: Mapping[str, Any], status: str) -> list[str]:
@@ -242,6 +422,28 @@ class StatusRenderer:
         padded = [f"{self._detail_indent}{line}" if line else self._detail_indent for line in lines[:max_lines]]
         return padded
 
+    def _wrap_text(self, text: str, font: ImageFont.ImageFont, max_width: int) -> list[str]:
+        if not text:
+            return [""]
+        result: list[str] = []
+        for paragraph in text.splitlines() or [""]:
+            if not paragraph.strip():
+                result.append("")
+                continue
+            words = paragraph.split()
+            current = ""
+            for word in words:
+                candidate = (current + " " + word).strip()
+                if candidate and self._measure_text(candidate, font=font) <= max_width:
+                    current = candidate
+                else:
+                    if current:
+                        result.append(current)
+                    current = word
+            if current:
+                result.append(current)
+        return result or [""]
+
     def _extract_project_label(self, record: Mapping[str, Any]) -> str:
         project = record.get("project")
         name = ""
@@ -277,6 +479,7 @@ class StatusRenderer:
         *,
         pending_count: int | None,
         human_notification_count: int | None,
+        power_status: Mapping[str, Any] | None = None,
     ) -> int:
         title = "Nightshift"
         subtitle = (self._subtitle_text or "").strip()
@@ -285,12 +488,43 @@ class StatusRenderer:
         subtitle_font = self._subtitle_font if subtitle_block else None
         subtitle_height = subtitle_font.size if subtitle_font else 0
         title_block_height = self._title_font.size + (self._subtitle_gap if subtitle_block else 0) + subtitle_height
-        stats_lines = self._format_header_stats_lines(pending_count, human_notification_count)
+        power_block = self._build_power_display(power_status)
+        stats_lines = [] if power_block else self._format_header_stats_lines(
+            pending_count,
+            human_notification_count,
+        )
         stats_font = self._body_font
         stats_line_gap = max(6, stats_font.size // 3)
         stats_block_height = 0
         stats_width = 0
-        if stats_lines:
+        glyph_width = 0
+        glyph_gap = 0
+        glyph_font = None
+        text_lines: list[str] = []
+        if power_block:
+            glyph_text = power_block.get("glyph") or ""
+            glyph_font = power_block.get("glyph_font") or stats_font
+            text_lines = [
+                line
+                for line in (
+                    power_block.get("primary"),
+                    power_block.get("secondary"),
+                )
+                if line
+            ]
+            glyph_width = self._measure_text(glyph_text, font=glyph_font) if glyph_text else 0
+            glyph_gap = max(12, stats_font.size // 2) if glyph_text and text_lines else 0
+            text_width = max((self._measure_text(line, font=stats_font) for line in text_lines), default=0)
+            stats_width = glyph_width + glyph_gap + text_width
+            text_block_height = (
+                (stats_font.size * len(text_lines))
+                + (stats_line_gap * (len(text_lines) - 1) if len(text_lines) > 1 else 0)
+                if text_lines
+                else 0
+            )
+            glyph_height = glyph_font.size if glyph_text else 0
+            stats_block_height = max(glyph_height, text_block_height)
+        elif stats_lines:
             stats_block_height = (stats_font.size * len(stats_lines)) + (
                 stats_line_gap * (len(stats_lines) - 1) if len(stats_lines) > 1 else 0
             )
@@ -307,13 +541,73 @@ class StatusRenderer:
         if logo:
             logo_y = y + max(0, (header_height - logo.height) // 2)
             canvas.paste(logo, (self._margin, logo_y))
-        if stats_lines:
+        if power_block:
+            stats_x = max(self._margin, self.width - self._margin - stats_width)
+            stats_y = y + max(0, (header_height - stats_block_height) // 2)
+            glyph_text = power_block.get("glyph") or ""
+            glyph_font = glyph_font or stats_font
+            text_x = stats_x
+            text_y = stats_y + max(
+                0,
+                (
+                    stats_block_height
+                    - (
+                        (stats_font.size * len(text_lines))
+                        + (stats_line_gap * (len(text_lines) - 1) if len(text_lines) > 1 else 0)
+                    )
+                )
+                // 2,
+            ) if text_lines else stats_y
+            current_y = text_y
+            text_width = 0
+            for line in text_lines:
+                draw.text((text_x, current_y), line, font=stats_font, fill=0x00)
+                text_width = max(text_width, self._measure_text(line, font=stats_font))
+                current_y += stats_font.size + stats_line_gap
+            icon_x = text_x + (text_width if text_lines else 0) + (glyph_gap if glyph_text else 0)
+            if glyph_text:
+                icon_y = stats_y + max(0, (stats_block_height - glyph_font.size) // 2)
+                draw.text((icon_x, icon_y), glyph_text, font=glyph_font, fill=0x00)
+        elif stats_lines:
             stats_x = max(self._margin, self.width - self._margin - stats_width)
             stats_y = y + max(0, (header_height - stats_block_height) // 2)
             for idx, line in enumerate(stats_lines):
                 line_y = stats_y + idx * (stats_font.size + stats_line_gap)
                 draw.text((stats_x, line_y), line, font=stats_font, fill=0x00)
         return y + header_height + 30
+
+    def _build_power_display(self, power_status: Mapping[str, Any] | None) -> dict[str, Any] | None:
+        if not power_status:
+            return None
+        percentage = self._coerce_float(power_status.get("percentage"))
+        clamped = None if percentage is None else max(0.0, min(100.0, percentage))
+        if clamped is None and not power_status.get("state"):
+            return None
+        ac_power = power_status.get("ac_power")
+        state_value = str(power_status.get("state") or "").lower()
+        low_battery = bool(power_status.get("low_battery"))
+        charging = state_value == "charging" or ac_power is True
+        discharging = state_value == "battery" or ac_power is False
+        glyph_text = ""
+        glyph_font: ImageFont.FreeTypeFont | ImageFont.ImageFont | None = None
+        icon_name = self._select_battery_icon_name(clamped, charging, discharging, low_battery)
+        if icon_name and self._icon_font:
+            icon_char = self._get_icon_glyph(icon_name)
+            if icon_char:
+                glyph_text = icon_char
+                glyph_font = self._icon_font
+        if not glyph_text:
+            glyph_text = self._render_ascii_battery_bar(clamped, charging, discharging, low_battery)
+            glyph_font = self._body_font
+        primary = f"{clamped:.0f}%" if clamped is not None else ""
+        if not any([glyph_text, primary]):
+            return None
+        return {
+            "glyph": glyph_text,
+            "glyph_font": glyph_font or self._body_font,
+            "primary": primary,
+            "secondary": "",
+        }
 
     def _format_header_stats_lines(
         self,
@@ -328,6 +622,76 @@ class StatusRenderer:
             f"Agent tasks: {agent_label}",
             f"Human tasks: {human_label}",
         ]
+
+    def _render_ascii_battery_bar(
+        self,
+        percentage: float | None,
+        charging: bool,
+        discharging: bool,
+        low_battery: bool,
+    ) -> str:
+        segments = 10
+        if percentage is None:
+            inner = "." * segments
+        else:
+            clamped = max(0.0, min(100.0, percentage))
+            filled = int(round(clamped / 100 * segments))
+            inner = "#" * filled + "-" * (segments - filled)
+        indicator = ""
+        if charging:
+            indicator = "↑"
+        elif low_battery:
+            indicator = "!"
+        elif discharging:
+            indicator = "↓"
+        return f"[{inner}]{indicator}"
+
+    def _describe_power_state(self, power_status: Mapping[str, Any]) -> str | None:
+        state = str(power_status.get("state") or "").lower()
+        ac_power = power_status.get("ac_power")
+        if state == "charging":
+            return "Charging"
+        if state == "charged":
+            return "On AC"
+        if state == "battery":
+            return "On battery"
+        if state == "ac":
+            return "On AC"
+        if isinstance(ac_power, bool):
+            return "On AC" if ac_power else "On battery"
+        return None
+
+    def _select_battery_icon_name(
+        self,
+        percentage: float | None,
+        charging: bool,
+        discharging: bool,
+        low_battery: bool,
+    ) -> str | None:
+        if percentage is None:
+            return "battery_charging-outline" if charging else "battery-unknown"
+        if percentage < 5:
+            return "battery-alert-variant-outline"
+        if charging:
+            bucket = 100 if percentage >= 95 else max(10, min(90, int(percentage // 10) * 10))
+            return "battery-charging-100" if bucket == 100 else f"battery-charging-{bucket}"
+        if low_battery and percentage < 10:
+            return "battery-alert"
+        bucket = 100 if percentage >= 95 else max(10, min(90, int(percentage // 10) * 10))
+        if bucket == 100:
+            return "battery"
+        return f"battery-{bucket}"
+
+    def _get_icon_glyph(self, name: str | None) -> str | None:
+        if not name:
+            return None
+        return self._icon_glyphs.get(name)
+
+    def _coerce_float(self, value: Any) -> float | None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     def _normalize_count(self, value: int | None) -> int | None:
         if value is None:
@@ -372,6 +736,47 @@ class StatusRenderer:
                 return ImageFont.truetype(str(font_path), size=size)
         return ImageFont.load_default()
 
+    def _load_icon_font(self, size: int) -> ImageFont.FreeTypeFont | None:
+        for path in ICON_FONT_CANDIDATES:
+            font_path = Path(path)
+            if font_path.exists():
+                try:
+                    return ImageFont.truetype(str(font_path), size=size)
+                except OSError:
+                    continue
+        return None
+
+    def _load_icon_codepoints(self) -> dict[str, str]:
+        mapping: dict[str, str] = {}
+        path = ICON_CODEPOINTS_PATH
+        if not path.exists():
+            return mapping
+        try:
+            if path.suffix == ".json":
+                data = json.loads(path.read_text(encoding="utf-8"))
+                for name, code in data.items():
+                    try:
+                        mapping[name] = chr(int(code, 16))
+                    except ValueError:
+                        continue
+                return mapping
+            payload = path.read_text(encoding="utf-8")
+        except OSError:
+            return {}
+        for line in payload.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) != 2:
+                continue
+            name, code = parts
+            try:
+                mapping[name] = chr(int(code, 16))
+            except ValueError:
+                continue
+        return mapping
+
     def _build_footer_labels(self) -> tuple[str, str]:
         ip_address = self._get_primary_ip() or "0.0.0.0"
         hostname = socket.gethostname() or "unknown"
@@ -406,6 +811,17 @@ class StatusRenderer:
         if invert:
             return ImageOps.invert(candidate)
         return candidate
+
+    def _select_shutdown_logo(self) -> Image.Image | None:
+        """Return a bright logo variant suitable for a black fullscreen wipe."""
+        logos = getattr(self, "_header_logos", {})
+        if not logos:
+            return None
+        for key in ("light", "fallback", "dark"):
+            candidate = logos.get(key)
+            if candidate:
+                return candidate
+        return None
 
     def _load_header_logos(self, base_size: int) -> dict[str, Image.Image]:
         """Load available header assets plus a fallback mark."""

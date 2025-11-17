@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from auth import AuthManager, AuthenticatedUser
@@ -86,12 +86,27 @@ def schedule_display_refresh(reason: str) -> None:
             logger.exception("Unable to enqueue display refresh (%s)", reason)
 
 
+def current_power_status_payload() -> Optional[Dict[str, Any]]:
+    """Return the most recent UPS telemetry snapshot, if one exists."""
+    cache = APP_CONTEXT.get("power_cache")
+    if not cache:
+        return None
+    getter = getattr(cache, "latest", None)
+    if not callable(getter):
+        return None
+    try:
+        return getter()
+    except Exception:  # pragma: no cover - defensive cache fetch
+        return None
+
+
 def _env_flag(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
+REQUIRE_CONTROL_PLANE_IDENTITY = _env_flag("REQUIRE_CONTROL_PLANE_IDENTITY", False)
 
 def utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -2172,7 +2187,7 @@ class PromptWorker(threading.Thread):
     def run(self) -> None:
         while not self._stop_event.is_set():
             identity_manager: Optional[AgentIdentityManager] = APP_CONTEXT.get("identity")
-            if identity_manager and not identity_manager.is_paired():
+            if REQUIRE_CONTROL_PLANE_IDENTITY and identity_manager and not identity_manager.is_paired():
                 time.sleep(1)
                 continue
             prompt_id = self.store.next_prompt_id()
@@ -2620,6 +2635,9 @@ class EventStreamer:
 
     def broadcast_queue(self, targets: Optional[Iterable[WebSocketConnection]] = None) -> None:
         snapshot = self.store.list_prompts()
+        power_status = current_power_status_payload()
+        if power_status:
+            snapshot["power_status"] = power_status
         self.ws_manager.broadcast("queue_snapshot", snapshot, targets=targets)
 
     def broadcast_prompt(
@@ -2640,6 +2658,15 @@ class EventStreamer:
     ) -> None:
         payload = {"prompt_id": prompt_id}
         self.ws_manager.broadcast("prompt_deleted", payload, targets=targets)
+
+    def broadcast_power_status(
+        self,
+        payload: Dict[str, Any],
+        targets: Optional[Iterable[WebSocketConnection]] = None,
+    ) -> None:
+        if not payload:
+            return
+        self.ws_manager.broadcast("power_status", {"power_status": payload}, targets=targets)
 
     def broadcast_health(self, targets: Optional[Iterable[WebSocketConnection]] = None) -> None:
         prompt_metrics = self.store.health_snapshot()
@@ -2787,6 +2814,9 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             self._write_json(payload)
         elif clean_path == "/api/prompts":
             payload = APP_CONTEXT["store"].list_prompts()
+            power_status = current_power_status_payload()
+            if power_status:
+                payload["power_status"] = power_status
             self._write_json(payload)
         elif clean_path.startswith("/api/prompts/"):
             prompt_id = clean_path.rsplit("/", 1)[-1]
@@ -2927,6 +2957,49 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 events.broadcast_prompt(record.prompt_id)
                 events.broadcast_health()
             self._write_json({"prompt_id": record.prompt_id, "status": record.status}, status=201)
+        elif clean_path == "/api/eink/overlay":
+            manager = APP_CONTEXT.get("display_manager")
+            if not manager:
+                self._write_json({"error": "e-ink display unavailable"}, status=503)
+                return
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body or b"{}")
+            except json.JSONDecodeError:
+                self._write_json({"error": "invalid json"}, status=400)
+                return
+            title = str(payload.get("title") or "Nightshift").strip() or "Nightshift"
+            lines_field = payload.get("lines")
+            if isinstance(lines_field, list):
+                lines = [str(line or "") for line in lines_field]
+            elif isinstance(lines_field, str):
+                lines = [lines_field]
+            else:
+                message = payload.get("message")
+                lines = [str(message or "")] if message is not None else [""]
+            duration_raw = payload.get("duration_sec")
+            duration_sec = None
+            if duration_raw is not None:
+                try:
+                    duration_sec = float(duration_raw)
+                except (TypeError, ValueError):
+                    self._write_json({"error": "duration_sec must be numeric"}, status=400)
+                    return
+            invert_value = payload.get("invert")
+            if invert_value is None:
+                invert_flag = None
+            else:
+                invert_flag = bool(invert_value)
+            try:
+                overlay = manager.show_overlay(title, lines, duration_sec=duration_sec, invert=invert_flag)
+            except Exception as exc:  # pragma: no cover - hardware path
+                self._write_json({"error": f"unable to render overlay: {exc}"}, status=500)
+                return
+            APP_CONTEXT["audit_logger"].info(
+                "Overlay posted title=%s duration=%s", title, duration_sec or "indefinite"
+            )
+            self._write_json({"status": "overlay_scheduled", "overlay": overlay})
         elif clean_path == "/api/human_tasks":
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
@@ -3334,7 +3407,15 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             return
         clean_path = self.path.split("?", 1)[0]
         normalized_path = clean_path.rstrip("/")
-        if normalized_path == "/api/human_tasks":
+        if normalized_path == "/api/eink/overlay":
+            manager = APP_CONTEXT.get("display_manager")
+            if not manager:
+                self._write_json({"error": "e-ink display unavailable"}, status=503)
+                return
+            manager.clear_overlay()
+            APP_CONTEXT["audit_logger"].info("Overlay cleared via API")
+            self._write_json({"status": "overlay_cleared"})
+        elif normalized_path == "/api/human_tasks":
             length = int(self.headers.get("Content-Length", 0))
             payload = {}
             if length:
@@ -3542,14 +3623,15 @@ def start_display_manager(
     logger: logging.Logger,
     preferences: PreferenceStore | None,
     human_tasks: HumanTaskStore | None,
-):
+    events: EventStreamer | None = None,
+) -> tuple[TaskQueueDisplayManager | None, Any | None]:
     if not _env_flag("ENABLE_EINK_DISPLAY"):
-        return None
+        return None, None
     try:
         from eink.manager import TaskQueueDisplayManager
     except ImportError as exc:
         logger.warning("E-ink display support unavailable: %s", exc)
-        return None
+        return None, None
 
     def _env_int(name: str, default: int) -> int:
         return int(os.environ.get(name, default))
@@ -3573,6 +3655,32 @@ def start_display_manager(
         vcom_mv=_env_int("EINK_VCOM_MV", 1800),
         rotate=_env_int("EINK_ROTATE", IT8951_ROTATE_180),
     )
+    power_monitor = None
+    power_cache = None
+    power_update_callback = None
+    if events:
+        def _handle_power_update(payload: dict[str, Any]) -> None:
+            try:
+                events.broadcast_power_status(payload)
+            except Exception:  # pragma: no cover - defensive logging
+                logger.debug("Failed to broadcast power status snapshot")
+
+        power_update_callback = _handle_power_update
+    if _env_flag("ENABLE_UPS_TELEMETRY", True):
+        try:
+            from eink.power import PowerTelemetryCache, X1201PowerMonitor
+            power_monitor = X1201PowerMonitor(
+                i2c_bus=_env_int("UPS_I2C_BUS", 1),
+                address=_env_int("UPS_I2C_ADDRESS", 0x36),
+                ac_pin=_env_int("UPS_AC_PIN", 6),
+                gpio_chip=os.environ.get("UPS_GPIO_CHIP", "gpiochip0"),
+                logger=logger,
+            )
+            power_cache = PowerTelemetryCache(on_update=power_update_callback)
+        except Exception as exc:
+            logger.warning("UPS telemetry unavailable: %s", exc)
+    power_poll_interval = float(os.environ.get("UPS_POLL_INTERVAL_SEC", "10"))
+    overlay_fast_mode = _env_flag("EINK_OVERLAY_FAST_MODE", False)
     manager = TaskQueueDisplayManager(
         store,
         logger,
@@ -3580,9 +3688,13 @@ def start_display_manager(
         config=config,
         preferences=preferences,
         human_tasks=human_tasks,
+        power_monitor=power_monitor,
+        power_cache=power_cache,
+        power_poll_interval_sec=power_poll_interval,
+        overlay_fast_mode=overlay_fast_mode,
     )
     manager.start()
-    return manager
+    return manager, power_cache
 
 
 def reconcile_server_restart_prompts(store: PromptStore, logger: logging.Logger) -> list[str]:
@@ -3675,7 +3787,13 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
             )
 
     runner = CodexRunner(REPO_ROOT, events, audit_logger)
-    display_manager = start_display_manager(store, audit_logger, preference_store, human_task_store)
+    display_manager, power_cache = start_display_manager(
+        store,
+        audit_logger,
+        preference_store,
+        human_task_store,
+        events,
+    )
     worker = PromptWorker(store, runner, audit_logger, display_manager, event_streamer=events)
     worker.start()
     health_thread = HealthBroadcaster(events)
@@ -3688,6 +3806,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         "environments": environment_store,
         "audit_logger": audit_logger,
         "display_manager": display_manager,
+        "power_cache": power_cache,
         "auth": auth_manager,
         "ws_manager": ws_manager,
         "events": events,

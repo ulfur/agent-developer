@@ -51,6 +51,7 @@ IT8951_ROTATE_270 = 3
 IT8951_LDIMG_L_ENDIAN = 0
 IT8951_PIXEL_4BPP = 2
 IT8951_PIXEL_8BPP = 3
+DU_MODE = 1    # fast monochrome refresh
 GC16_MODE = 2  # 16-level grayscale refresh
 
 
@@ -89,7 +90,7 @@ class IT8591DisplayDriver:
         self._initialise()
 
     # ------------------------------------------------------------------ public
-    def display_image(self, image: Image.Image) -> None:
+    def display_image(self, image: Image.Image, *, mode: int = GC16_MODE) -> None:
         """Send the provided PIL image (converted to 4bpp grayscale) to the HAT."""
         if self._spi_handle is None or self._gpio_handle is None:
             raise DisplayUnavailable("display driver not initialised")
@@ -98,7 +99,41 @@ class IT8591DisplayDriver:
             prepared = self._prepare_frame(image)
             self._wait_for_display_ready()
             self._write_frame_4bpp(prepared, 0, 0, self.width, self.height)
-            self._display_area(0, 0, self.width, self.height, GC16_MODE)
+            self._display_area(0, 0, self.width, self.height, mode)
+            self._wait_for_display_ready()
+
+    def display_region(
+        self,
+        image: Image.Image,
+        bounds: tuple[int, int, int, int],
+        *,
+        mode: int = DU_MODE,
+    ) -> None:
+        if self._spi_handle is None or self._gpio_handle is None:
+            raise DisplayUnavailable("display driver not initialised")
+        x, y, w, h = self._normalize_bounds(bounds)
+        if w <= 0 or h <= 0:
+            return
+        hw_x, hw_y = self._transform_coordinates(x, y, w, h)
+        self._logger.debug(
+            "display_region bounds=%s,%s,%s,%s -> hw=%s,%s",
+            x,
+            y,
+            w,
+            h,
+            hw_x,
+            hw_y,
+        )
+        with self._lock:
+            prepared = self._prepare_region(image, x, y, w, h)
+            self._wait_for_display_ready()
+            self._write_frame_4bpp(prepared, hw_x, hw_y, w, h)
+            # Some firmware revisions ignore USDEF_I80_CMD_DPY_AREA when rotation is enabled;
+            # fall back to full-frame refresh for stability when partial rendering fails.
+            try:
+                self._display_area(hw_x, hw_y, w, h, mode)
+            except Exception:
+                self._display_area(0, 0, self.width, self.height, mode)
             self._wait_for_display_ready()
 
     def clear(self) -> None:
@@ -317,10 +352,16 @@ class IT8591DisplayDriver:
     def _prepare_frame(self, image: Image.Image) -> bytearray:
         if image.size != (self.width, self.height):
             image = image.resize((self.width, self.height))
+        return self._pack_grayscale(image, self.width)
+
+    def _prepare_region(self, image: Image.Image, x: int, y: int, w: int, h: int) -> bytearray:
+        region = image.crop((x, y, x + w, y + h))
+        return self._pack_grayscale(region, region.width)
+
+    def _pack_grayscale(self, image: Image.Image, stride: int) -> bytearray:
         gray = image.convert("L")
         pixels = gray.tobytes()
         packed = bytearray()
-        stride = self.width
         for row_start in range(0, len(pixels), stride):
             row = pixels[row_start : row_start + stride]
             nibble = -1
@@ -357,3 +398,45 @@ class IT8591DisplayDriver:
             idx += 2
         self._digital_write(self._config.cs_pin, 1)
         self._load_img_end()
+
+    def _normalize_bounds(self, bounds: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+        x, y, w, h = bounds
+        x = max(0, min(self.width - 1, x))
+        y = max(0, min(self.height - 1, y))
+        if x % 2:
+            x = max(0, x - 1)
+            w += 1
+        w = max(1, min(self.width - x, w))
+        # align to 4-pixel (2-byte) boundaries for 4bpp writes
+        if x % 4:
+            shift = x % 4
+            x = max(0, x - shift)
+            w += shift
+        remainder = w % 4
+        if remainder:
+            pad = 4 - remainder
+            if x + w + pad <= self.width:
+                w += pad
+            else:
+                x = max(0, x - pad)
+                w = min(self.width - x, w + pad)
+        h = max(1, min(self.height - y, h))
+        return x, y, w, h
+
+    def _transform_coordinates(self, x: int, y: int, w: int, h: int) -> tuple[int, int]:
+        rotate = self._config.rotate
+        if rotate == IT8951_ROTATE_0:
+            return x, y
+        if rotate == IT8951_ROTATE_90:
+            hw_x = y
+            hw_y = self.width - (x + w)
+            return hw_x, hw_y
+        if rotate == IT8951_ROTATE_180:
+            hw_x = self.width - (x + w)
+            hw_y = self.height - (y + h)
+            return hw_x, hw_y
+        if rotate == IT8951_ROTATE_270:
+            hw_x = self.height - (y + h)
+            hw_y = x
+            return hw_x, hw_y
+        return x, y

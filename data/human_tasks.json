@@ -5,10 +5,10 @@
     "description": "Gather the Cloudflare tunnel certs, nghtshft.ai API tokens, and Monday sandbox tokens the pairing bootstrap uses. Place the bundle in the operator vault + ~/.config/systemd env files so the backend can hand them to POST /register-agent when pairing completes.",
     "status": "open",
     "blocking": true,
-    "project_id": "nightshift",
-    "prompt_id": null,
     "created_at": "2025-11-17T09:06:05+00:00",
     "updated_at": "2025-11-17T09:06:05+00:00",
+    "project_id": "nightshift",
+    "prompt_id": null,
     "resolved_at": null
   },
   "env-task-dns-nebulapulse": {
@@ -17,10 +17,10 @@
     "description": "Add preview.nebulapulse.local A/AAAA + wildcard SAN certs so Traefik can terminate HTTPS. Coordinate with the ops DNS team to publish the records, request a preview.nebulapulse.local/*.preview.nebulapulse.local certificate (Let's Encrypt or Cloudflare), drop the crt/key into /etc/traefik/certs on preview.nebulapulse.local, and reload Traefik so the registry entry can move out of 'planned'. Share the certificate thumbprint in #nightshift-ops when done.",
     "status": "open",
     "blocking": true,
-    "project_id": "nightshift",
-    "prompt_id": null,
     "created_at": "2025-11-16T10:25:00+00:00",
     "updated_at": "2025-11-16T11:20:51.898591+00:00",
+    "project_id": "nightshift",
+    "prompt_id": null,
     "resolved_at": null
   },
   "env-task-credentials-nightshift": {
@@ -29,10 +29,10 @@
     "description": "Sync the SSH keys + secrets referenced in data/environments.json for env-nightshift-dev. Verify the pi-dev.nightshift.local host has the operator SSH keys installed, refresh the password store/Vault entries that Nightshift references (Agent API token, Traefik dashboard creds, rsync backup keys), and confirm scripts/environments.py show env-nightshift-dev reports active credentials.",
     "status": "open",
     "blocking": false,
-    "project_id": "nightshift",
-    "prompt_id": null,
     "created_at": "2025-11-16T10:25:00+00:00",
     "updated_at": "2025-11-16T11:20:51.898591+00:00",
+    "project_id": "nightshift",
+    "prompt_id": null,
     "resolved_at": null
   },
   "env-task-tls-nightshift": {
@@ -41,10 +41,10 @@
     "description": "Request/renew the *.nightshift.local certificates referenced by metadata.router.tls, copy the crt/key into data/router/certs on the dev host, and reload Traefik so HTTPS works for pi-dev.nightshift.local.",
     "status": "open",
     "blocking": true,
-    "project_id": "nightshift",
-    "prompt_id": null,
     "created_at": "2025-11-16T12:32:00+00:00",
     "updated_at": "2025-11-16T12:32:00+00:00",
+    "project_id": "nightshift",
+    "prompt_id": null,
     "resolved_at": null
   }
 }

@@ -142,6 +142,19 @@ Key environment variables:
 | `EINK_ROTATE` | `180` | Panel rotation (0/90/180/270).
 | `CODEX_ENABLE_SEARCH` | `1` | Enables `--search` for Codex runs (sharing the same env table as the backend worker).
 
+### UPS Telemetry (Geekworm X1201)
+4. On the Pi, export `ENABLE_EINK_DISPLAY=1 ENABLE_UPS_TELEMETRY=1` (the telemetry flag defaults to `1`) before starting `backend/server.py` so the worker brings up the `X1201PowerMonitor`.
+5. Tail `logs/progress.log` during boot; you should see either `UPS telemetry unavailable` diagnostics when I²C/GPIO are misconfigured or regular e-ink refresh entries once the fuel gauge at `0x36` is readable. Use `i2cdetect -y <bus>` if the Maxim gauge does not appear.
+6. Pull the AC adapter briefly to confirm the aux display flips between `UPS: 93% 4.05V` + `Power: Charging from AC` and `UPS (LOW): …` + `Power: On battery backup`. The renderer automatically falls back to queue stats whenever telemetry drops out, so log warnings are your cue to adjust wiring or permissions.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ENABLE_UPS_TELEMETRY` | `1` | Toggle Geekworm X1201 fuel-gauge + AC sensing.
+| `UPS_I2C_BUS` | `1` | `/dev/i2c-*` index hosting the Maxim fuel gauge (address `0x36`).
+| `UPS_I2C_ADDRESS` | `0x36` | Override if the HAT is reprogrammed.
+| `UPS_AC_PIN` | `6` | BCM pin for the PLD/adapter-fault line (set `-1` to disable GPIO reads).
+| `UPS_GPIO_CHIP` | `gpiochip0` | gpiod chip used to read `UPS_AC_PIN` (accepts numeric index or name).
+
 The renderer splits the canvas into human-task and prompt columns, shows queue counts, the rotating subtitle, and the most recent entries with timestamps. Refreshes happen after every queue mutation or on demand via the backend admin actions.
 
 ## Headless Wi-Fi Bootstrap

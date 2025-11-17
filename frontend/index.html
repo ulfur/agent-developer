@@ -1254,6 +1254,8 @@
         font-style: italic;
         color: var(--text-muted);
         letter-spacing: 0.08em;
+        display: inline-block;
+        min-width: 16ch;
       }
 
       @media (max-width: 959px) {
@@ -1274,6 +1276,44 @@
         display: flex;
         align-items: center;
         margin-inline-end: 0.5rem;
+      }
+
+      .header-telemetry {
+        display: flex;
+        align-items: center;
+        margin-inline-end: 0.35rem;
+        gap: 0.35rem;
+      }
+
+      .header-telemetry__label {
+        font-size: 0.75rem;
+        font-weight: 500;
+        line-height: 1.2;
+      }
+
+      .header-telemetry__icon {
+        font-size: 1.4rem;
+        line-height: 1;
+      }
+
+      .header-telemetry__icon--info {
+        color: var(--text-primary);
+      }
+
+      .header-telemetry__icon--error {
+        color: #f87171;
+      }
+
+      .header-telemetry__label--error {
+        color: #f87171;
+      }
+
+      @media (max-width: 959px) {
+        .header-telemetry {
+          order: 3;
+          margin-inline: 0;
+          margin-top: 0.5rem;
+        }
       }
 
       .human-tasks-trigger {
@@ -2072,6 +2112,12 @@
             description: 'Type what you want Nightshift to do, then press Send. Average turn duration helps you know how long you might wait.',
           },
           {
+            id: 'prompt-templates',
+            target: '[data-tour-id=\"tour-quick-prompts\"]',
+            title: 'Use quick prompt templates',
+            description: 'Open the quick prompts tray to drop in curated starters when you need a fast way to describe a common task.',
+          },
+          {
             id: 'prompt-queue',
             target: '[data-tour-id=\"tour-queue-list\"]',
             title: 'Track the Task queue',
@@ -2092,12 +2138,6 @@
         ],
         settings: [
           {
-            id: 'settings-navigation',
-            target: '[data-tour-id=\"tour-home-link\"]',
-            title: 'Head back to the dashboard',
-            description: 'The Nightshift logo always returns you to the Task Queue once you finish making changes here.',
-          },
-          {
             id: 'settings-password',
             target: '[data-tour-id=\"tour-settings-password\"]',
             title: 'Update your password',
@@ -2117,12 +2157,6 @@
           },
         ],
         workspaces: [
-          {
-            id: 'workspaces-navigation',
-            target: '[data-tour-id=\"tour-home-link\"]',
-            title: 'Return to the dashboard',
-            description: 'The Nightshift logo takes you back to the Task Queue once you finish reviewing the registry.',
-          },
           {
             id: 'workspaces-search',
             target: '[data-tour-id=\"tour-workspaces-search\"]',
@@ -2388,6 +2422,7 @@
           const promptText = ref('');
           const queue = ref([]);
           const queueStatusBuckets = ref(createEmptyQueueStatusBuckets());
+          const powerStatus = ref(null);
           const selectedPrompt = ref(null);
           const nowTick = ref(Date.now());
           const loading = ref(true);
@@ -2570,6 +2605,11 @@ Steps:
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
+          });
+          const integerFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+          const percentFormatter = new Intl.NumberFormat(undefined, {
+            style: 'percent',
+            maximumFractionDigits: 0,
           });
           const agentIdentityDisplayName = computed(() => {
             if (agentIdentity.value.status === 'paired') {
@@ -3088,6 +3128,7 @@ Steps:
             logLoading.value = false;
             Object.keys(promptStreams).forEach((key) => delete promptStreams[key]);
             resetEnvironmentState();
+            powerStatus.value = null;
           };
 
           const buildWebSocketUrl = () => {
@@ -3211,6 +3252,11 @@ Steps:
                   }
                   clearStreamState(deletedId);
                 }
+                break;
+              }
+              case 'power_status': {
+                const snapshot = payload?.power_status || payload;
+                powerStatus.value = normalizePowerStatus(snapshot);
                 break;
               }
               case 'health':
@@ -3389,6 +3435,114 @@ Steps:
         const minutes = Math.floor(totalSeconds / 60);
         const remainingSeconds = totalSeconds % 60;
         return `${minutes}m ${remainingSeconds.toString().padStart(2, '0')}s`;
+      };
+
+      const coerceNumeric = (value) => {
+        if (value == null || value === '') {
+          return null;
+        }
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric : null;
+      };
+
+      const coerceBoolean = (value) => {
+        if (typeof value === 'boolean') {
+          return value;
+        }
+        if (typeof value === 'number') {
+          if (value === 1) return true;
+          if (value === 0) return false;
+        }
+        if (typeof value === 'string') {
+          const normalized = value.trim().toLowerCase();
+          if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+            return true;
+          }
+          if (['0', 'false', 'no', 'off'].includes(normalized)) {
+            return false;
+          }
+        }
+        return null;
+      };
+
+      const normalizePowerStatus = (raw) => {
+        if (!raw || typeof raw !== 'object') {
+          return null;
+        }
+        const percentage = coerceNumeric(raw.percentage);
+        const voltage = coerceNumeric(raw.voltage);
+        const acPower = coerceBoolean(raw.ac_power);
+        let timestamp = coerceNumeric(raw.timestamp);
+        if (timestamp != null && timestamp > 10_000_000_000) {
+          // Milliseconds were provided instead of seconds.
+          timestamp = timestamp / 1000;
+        }
+        let updatedAt = typeof raw.updated_at === 'string' ? raw.updated_at : null;
+        if (!updatedAt && timestamp != null) {
+          updatedAt = new Date(timestamp * 1000).toISOString();
+        }
+        return {
+          percentage,
+          voltage,
+          ac_power: acPower,
+          state: typeof raw.state === 'string' ? raw.state : '',
+          low_battery: Boolean(raw.low_battery),
+          timestamp,
+          updated_at: updatedAt,
+        };
+      };
+
+      const clampPercentage = (value) => {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return null;
+        }
+        return Math.min(100, Math.max(0, value));
+      };
+
+      const formatRelativeUpdateTime = (isoString) => {
+        if (!isoString) {
+          return '';
+        }
+        const timestamp = new Date(isoString);
+        if (Number.isNaN(timestamp.getTime())) {
+          return '';
+        }
+        const deltaSeconds = Math.max(0, (Date.now() - timestamp.getTime()) / 1000);
+        if (deltaSeconds < 30) {
+          return 'Updated just now';
+        }
+        if (deltaSeconds < 60) {
+          return 'Updated <1 min ago';
+        }
+        const minutes = Math.floor(deltaSeconds / 60);
+        if (minutes < 60) {
+          return `Updated ${minutes} min ago`;
+        }
+        const hours = Math.floor(deltaSeconds / 3600);
+        if (hours < 24) {
+          return `Updated ${hours} hr ago`;
+        }
+        const days = Math.floor(deltaSeconds / 86400);
+        return `Updated ${days}d ago`;
+      };
+
+
+      const resolveBatteryIconName = (percentage, charging, lowBattery) => {
+        if (percentage == null) {
+          return charging ? 'mdi-battery-charging-outline' : 'mdi-battery-unknown';
+        }
+        const level = clampPercentage(percentage) ?? 0;
+        if (level < 5) {
+          return 'mdi-battery-alert-variant-outline';
+        }
+        const bucket = level >= 95 ? 100 : Math.min(90, Math.max(10, Math.floor(level / 10) * 10));
+        if (charging) {
+          return bucket === 100 ? 'mdi-battery-charging-100' : `mdi-battery-charging-${bucket}`;
+        }
+        if (bucket === 100) {
+          return 'mdi-battery';
+        }
+        return `mdi-battery-${bucket}`;
       };
 
       const normalizeAgentIdentity = (payload) => {
@@ -3735,21 +3889,24 @@ Steps:
             queueStatusBuckets.value = normalizeQueueStatusBuckets(null, queue.value);
           };
 
-          const applyQueueSnapshot = (snapshot) => {
-            if (!snapshot) {
-              syncQueueItems([]);
-              queueStatusBuckets.value = normalizeQueueStatusBuckets(null, []);
-              return;
-            }
-            if (Array.isArray(snapshot)) {
-              syncQueueItems(snapshot);
-              queueStatusBuckets.value = normalizeQueueStatusBuckets(null, snapshot);
-              return;
-            }
-            const items = Array.isArray(snapshot.items) ? snapshot.items : [];
-            syncQueueItems(items);
-            queueStatusBuckets.value = normalizeQueueStatusBuckets(snapshot.status_buckets, items);
-          };
+      const applyQueueSnapshot = (snapshot) => {
+        if (!snapshot) {
+          syncQueueItems([]);
+          queueStatusBuckets.value = normalizeQueueStatusBuckets(null, []);
+          powerStatus.value = null;
+          return;
+        }
+        if (Array.isArray(snapshot)) {
+          syncQueueItems(snapshot);
+          queueStatusBuckets.value = normalizeQueueStatusBuckets(null, snapshot);
+          powerStatus.value = null;
+          return;
+        }
+        const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+        syncQueueItems(items);
+        queueStatusBuckets.value = normalizeQueueStatusBuckets(snapshot.status_buckets, items);
+        powerStatus.value = normalizePowerStatus(snapshot.power_status);
+      };
 
           const mergeQueueEntry = (entry) => {
             if (!entry || !entry.prompt_id) {
@@ -3988,7 +4145,9 @@ Steps:
                     : typeof item.queuePosition === 'number'
                       ? item.queuePosition
                       : index + 1;
-                const chronologySortKey = parseChronologicalTimestamp(getQueueChronologyTimestamp(item, status));
+                const chronologySortKey = parseChronologicalTimestamp(
+                  item.enqueued_at || item.created_at || item.updated_at || ''
+                );
                 return {
                   ...item,
                   queueIndex: queuePosition,
@@ -4001,34 +4160,18 @@ Steps:
               })
               .filter(Boolean);
             entries.sort((a, b) => {
-              const statusRankA = QUEUE_STATUS_SORT_ORDER[(a.status || '').toLowerCase()] ?? 99;
-              const statusRankB = QUEUE_STATUS_SORT_ORDER[(b.status || '').toLowerCase()] ?? 99;
-              if (statusRankA !== statusRankB) {
-                return statusRankA - statusRankB;
-              }
-              const positionA =
-                typeof a.queueIndex === 'number' && Number.isFinite(a.queueIndex)
-                  ? a.queueIndex
-                  : Number.MAX_SAFE_INTEGER;
-              const positionB =
-                typeof b.queueIndex === 'number' && Number.isFinite(b.queueIndex)
-                  ? b.queueIndex
-                  : Number.MAX_SAFE_INTEGER;
-              if (positionA !== positionB) {
-                return positionA - positionB;
-              }
               const chronologyA =
                 typeof a.chronologySortKey === 'number' && Number.isFinite(a.chronologySortKey)
                   ? a.chronologySortKey
-                  : Number.POSITIVE_INFINITY;
+                  : Number.NEGATIVE_INFINITY;
               const chronologyB =
                 typeof b.chronologySortKey === 'number' && Number.isFinite(b.chronologySortKey)
                   ? b.chronologySortKey
-                  : Number.POSITIVE_INFINITY;
+                  : Number.NEGATIVE_INFINITY;
               if (chronologyA !== chronologyB) {
-                return chronologyA - chronologyB;
+                return chronologyB - chronologyA;
               }
-              return (a.orderIndex ?? 0) - (b.orderIndex ?? 0);
+              return (b.orderIndex ?? 0) - (a.orderIndex ?? 0);
             });
             return entries.map(({ orderIndex, chronologySortKey, ...rest }) => rest);
           });
@@ -4279,12 +4422,40 @@ Steps:
             };
           });
 
-          const humanTasksMenuLabel = computed(() => {
-            if (humanTasksLoading.value && !humanTaskEntries.value.length) {
-              return 'Loading human tasks';
-            }
-            return humanTasksBadgeState.value.label;
-          });
+      const humanTasksMenuLabel = computed(() => {
+        if (humanTasksLoading.value && !humanTaskEntries.value.length) {
+          return 'Loading human tasks';
+        }
+        return humanTasksBadgeState.value.label;
+      });
+
+      const powerStatusDisplay = computed(() => {
+        const status = powerStatus.value;
+        if (!status) {
+          return null;
+        }
+        const percent = clampPercentage(status.percentage);
+        const roundedPercent = percent != null ? Math.round(percent) : null;
+        if (roundedPercent == null) {
+          return null;
+        }
+        const state = (status.state || '').toLowerCase();
+        const acPower = status.ac_power === true;
+        const charging = state === 'charging' || acPower;
+        const onBattery = state === 'battery' || status.ac_power === false;
+        const icon = resolveBatteryIconName(roundedPercent, charging, status.low_battery);
+        const severity = roundedPercent < 5 || status.low_battery ? 'error' : 'info';
+        const stateLabel = charging ? 'Charging' : onBattery ? 'On battery' : 'On AC';
+        const tooltip = `Battery ${roundedPercent}% · ${stateLabel}`;
+        return {
+          primary: `${roundedPercent}%`,
+          secondary: '',
+          icon,
+          severity,
+          updatedLabel: formatRelativeUpdateTime(status.updated_at),
+          tooltip,
+        };
+      });
 
           const projectTaskLookup = computed(() => {
             const buckets = new Map();
@@ -4744,17 +4915,18 @@ Steps:
                 activeView.value = 'queue';
                 resetSettingsState();
                 humanTasks.value = [];
-                humanTasksSummary.value = {};
-                humanTasksRevision.value = null;
-                humanTasksError.value = '';
-                humanTasksLoading.value = false;
-                humanTaskReplyTarget.value = null;
-                promptReplyTarget.value = null;
-                expandedHumanTaskDescriptions.value = {};
-              }
-            },
-            { immediate: true }
-          );
+              humanTasksSummary.value = {};
+              humanTasksRevision.value = null;
+              humanTasksError.value = '';
+              humanTasksLoading.value = false;
+              humanTaskReplyTarget.value = null;
+              promptReplyTarget.value = null;
+              expandedHumanTaskDescriptions.value = {};
+              powerStatus.value = null;
+            }
+          },
+          { immediate: true }
+        );
 
           watch(
             () => [isAuthenticated.value, route.name, route.params.promptId],
@@ -5805,6 +5977,7 @@ Steps:
             hasActiveHumanTaskClear,
             humanTasksError,
             humanTasksBadgeState,
+            powerStatusDisplay,
             humanTasksMenuLabel,
             humanTasksMenuOpen,
             humanTaskReplyTarget,
@@ -6003,6 +6176,30 @@ Steps:
                   </div>
                 </v-app-bar-title>
                 <v-spacer />
+                <v-tooltip
+                  v-if="powerStatusDisplay"
+                  :text="powerStatusDisplay.tooltip"
+                  location="bottom"
+                >
+                  <template #activator="{ props }">
+                    <div
+                      class="header-telemetry"
+                      v-bind="props"
+                      :aria-label="powerStatusDisplay.tooltip"
+                      tabindex="0"
+                    >
+                      <span
+                        :class="[
+                          'mdi',
+                          powerStatusDisplay.icon,
+                          'header-telemetry__icon',
+                            'header-telemetry__icon--' + (powerStatusDisplay.severity || 'info'),
+                          ]"
+                        aria-hidden="true"
+                      ></span>
+                    </div>
+                  </template>
+                </v-tooltip>
                 <div
                   v-if="isAuthenticated"
                   class="header-notifications"
@@ -7021,7 +7218,7 @@ Steps:
                               hide-details
                               @keydown.enter="handleComposerKeydown"
                             />
-                            <div class="prompt-templates-panel">
+                            <div class="prompt-templates-panel" data-tour-id="tour-quick-prompts">
                               <div class="prompt-templates__header">
                                 <div class="prompt-templates__title">Quick prompt templates</div>
                                 <v-btn
@@ -7385,75 +7582,6 @@ Steps:
                               </div>
                             </div>
                           </div>
-                          <div v-if="showLiveStream">
-                            <div class="chat-message codex">
-                              <div class="message-meta message-meta--header">
-                                <span>Attempt {{ liveAttemptNumber || 'Live' }}</span>
-                                <span>Status · {{ formatStatus(selectedPrompt.status) }}</span>
-                                <span v-if="liveAttemptReceivedAt">
-                                  Received · {{ formatTimestamp(liveAttemptReceivedAt) }}
-                                </span>
-                                <span v-if="liveAttemptDurationSeconds != null">
-                                  Time · {{ formatDuration(liveAttemptDurationSeconds) }}
-                                </span>
-                              </div>
-                              <details v-if="activeStream.stderr" class="detail-panel" open>
-                                <summary>
-                                  <span>Output</span>
-                                  <button
-                                    type="button"
-                                    class="copy-button"
-                                    aria-label="Copy live stderr"
-                                    title="Copy live stderr"
-                                    @click.stop.prevent="copyToClipboard(activeStream.stderr || '')"
-                                  >
-                                    <span class="mdi mdi-content-copy" aria-hidden="true"></span>
-                                  </button>
-                                </summary>
-                                <div class="detail-content stderr-block" ref="liveStreamScrollRef">
-                                  <template v-for="(segment, segIndex) in parseOutputSegments(activeStream.stderr)">
-                                    <div
-                                      v-if="segment.type === 'text'"
-                                      class="stderr-segment"
-                                      :key="'live-stderr-' + segIndex"
-                                    >
-                                      {{ segment.content }}
-                                    </div>
-                                    <details
-                                      v-else-if="segment.type === 'code'"
-                                      class="stderr-code-block"
-                                      :key="'live-stderr-code-' + segIndex"
-                                    >
-                                      <summary class="stderr-code-summary">
-                                        <span class="stderr-code-summary__label">
-                                          {{ segment.language ? segment.language + ' Code' : 'Code block' }}
-                                        </span>
-                                        <span class="stderr-code-summary__preview">
-                                          {{ segment.preview }}
-                                        </span>
-                                      </summary>
-                                      <pre class="stderr-code-content">{{ segment.content }}</pre>
-                                    </details>
-                                    <details
-                                      v-else-if="segment.type === 'exec' || segment.type === 'file-update'"
-                                      class="stderr-exec-block"
-                                      :key="'live-stderr-collapse-' + segment.type + '-' + segIndex"
-                                    >
-                                      <summary class="stderr-code-summary">
-                                        <span class="stderr-code-summary__label">
-                                          {{ segment.type === 'file-update' ? 'File update' : 'Command output' }}
-                                        </span>
-                                        <span class="stderr-code-summary__preview">
-                                          {{ segment.preview }}
-                                        </span>
-                                      </summary>
-                                      <pre class="stderr-code-content">{{ segment.content }}</pre>
-                                    </details>
-                                  </template>
-                                </div>
-                              </details>
-                            </div>
-                          </div>
                           <div v-if="attemptLogs.length">
                             <div
                               v-for="(attempt, index) in attemptLogs"
@@ -7543,6 +7671,75 @@ Steps:
                           </div>
                           <div v-else-if="!showLiveStream" class="text-medium-emphasis text-center py-10">
                             No Nightshift output captured for this prompt yet.
+                          </div>
+                          <div v-if="showLiveStream">
+                            <div class="chat-message codex">
+                              <div class="message-meta message-meta--header">
+                                <span>Attempt {{ liveAttemptNumber || 'Live' }}</span>
+                                <span>Status · {{ formatStatus(selectedPrompt.status) }}</span>
+                                <span v-if="liveAttemptReceivedAt">
+                                  Received · {{ formatTimestamp(liveAttemptReceivedAt) }}
+                                </span>
+                                <span v-if="liveAttemptDurationSeconds != null">
+                                  Time · {{ formatDuration(liveAttemptDurationSeconds) }}
+                                </span>
+                              </div>
+                              <details v-if="activeStream.stderr" class="detail-panel" open>
+                                <summary>
+                                  <span>Output</span>
+                                  <button
+                                    type="button"
+                                    class="copy-button"
+                                    aria-label="Copy live stderr"
+                                    title="Copy live stderr"
+                                    @click.stop.prevent="copyToClipboard(activeStream.stderr || '')"
+                                  >
+                                    <span class="mdi mdi-content-copy" aria-hidden="true"></span>
+                                  </button>
+                                </summary>
+                                <div class="detail-content stderr-block" ref="liveStreamScrollRef">
+                                  <template v-for="(segment, segIndex) in parseOutputSegments(activeStream.stderr)">
+                                    <div
+                                      v-if="segment.type === 'text'"
+                                      class="stderr-segment"
+                                      :key="'live-stderr-' + segIndex"
+                                    >
+                                      {{ segment.content }}
+                                    </div>
+                                    <details
+                                      v-else-if="segment.type === 'code'"
+                                      class="stderr-code-block"
+                                      :key="'live-stderr-code-' + segIndex"
+                                    >
+                                      <summary class="stderr-code-summary">
+                                        <span class="stderr-code-summary__label">
+                                          {{ segment.language ? segment.language + ' Code' : 'Code block' }}
+                                        </span>
+                                        <span class="stderr-code-summary__preview">
+                                          {{ segment.preview }}
+                                        </span>
+                                      </summary>
+                                      <pre class="stderr-code-content">{{ segment.content }}</pre>
+                                    </details>
+                                    <details
+                                      v-else-if="segment.type === 'exec' || segment.type === 'file-update'"
+                                      class="stderr-exec-block"
+                                      :key="'live-stderr-collapse-' + segment.type + '-' + segIndex"
+                                    >
+                                      <summary class="stderr-code-summary">
+                                        <span class="stderr-code-summary__label">
+                                          {{ segment.type === 'file-update' ? 'File update' : 'Command output' }}
+                                        </span>
+                                        <span class="stderr-code-summary__preview">
+                                          {{ segment.preview }}
+                                        </span>
+                                      </summary>
+                                      <pre class="stderr-code-content">{{ segment.content }}</pre>
+                                    </details>
+                                  </template>
+                                </div>
+                              </details>
+                            </div>
                           </div>
                         </template>
                       </div>

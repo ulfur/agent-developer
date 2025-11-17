@@ -4,9 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
-import hashlib
-import hmac
 import json
 import os
 import sys
@@ -18,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 from urllib import error, request
+
+from lib.auth_tokens import issue_service_token
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -33,7 +32,6 @@ DEFAULT_API_TIMEOUT = float(os.environ.get("AGENT_API_TIMEOUT", "10"))
 DEFAULT_API_EMAIL = os.environ.get("AGENT_EMAIL")
 DEFAULT_API_PASSWORD = os.environ.get("AGENT_PASSWORD")
 DEFAULT_API_TOKEN = os.environ.get("AGENT_TOKEN")
-AUTH_TOKEN_TTL = int(os.environ.get("AUTH_TOKEN_TTL", "43200"))
 
 
 class PromptQueueError(Exception):
@@ -231,7 +229,10 @@ class APIPromptQueue:
                 raise PromptQueueError("Login succeeded but no token was returned")
             self._token = token
             return token
-        token = issue_service_token(self.data_dir, self.email)
+        try:
+            token = issue_service_token(self.data_dir, self.email)
+        except RuntimeError as exc:
+            raise PromptQueueError(str(exc)) from exc
         self._token = token
         return token
 
@@ -268,54 +269,6 @@ class QueueResult:
     prompt_id: str
     title: str
     queued_at: str
-
-
-def _urlsafe_b64encode(data: bytes) -> bytes:
-    return base64.urlsafe_b64encode(data).rstrip(b"=")
-
-
-def issue_service_token(data_dir: Path, email: Optional[str]) -> str:
-    target_email = (email or discover_default_email(data_dir) or "").strip()
-    if not target_email:
-        raise PromptQueueError("No users found; unable to issue a service token")
-    users = load_users(data_dir)
-    if target_email.lower() not in users:
-        raise PromptQueueError(f"User {target_email} does not exist in data/users.json")
-    secret_path = data_dir / ".auth_secret"
-    try:
-        secret = secret_path.read_bytes()
-    except OSError as exc:
-        raise PromptQueueError(f"Unable to read {secret_path}: {exc}") from exc
-    issued_at = int(time.time())
-    payload = {"sub": users[target_email.lower()], "iat": issued_at, "exp": issued_at + AUTH_TOKEN_TTL}
-    header = {"alg": "HS256", "typ": "JWT"}
-    header_b64 = _urlsafe_b64encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
-    payload_b64 = _urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-    signing_input = b".".join([header_b64, payload_b64])
-    signature = _urlsafe_b64encode(hmac.new(secret, signing_input, hashlib.sha256).digest())
-    return b".".join([signing_input, signature]).decode("ascii")
-
-
-def discover_default_email(data_dir: Path) -> Optional[str]:
-    users = load_users(data_dir)
-    if not users:
-        return None
-    return next(iter(users.values()))
-
-
-def load_users(data_dir: Path) -> Dict[str, str]:
-    users_path = data_dir / "users.json"
-    try:
-        contents = users_path.read_text(encoding="utf-8")
-        data = json.loads(contents or "{}")
-    except (OSError, json.JSONDecodeError):
-        return {}
-    result: Dict[str, str] = {}
-    for entry in data.get("users", []):
-        email = str(entry.get("email") or "").strip()
-        if email:
-            result[email.lower()] = email
-    return result
 
 
 def _post_json(url: str, payload: Dict[str, Any], token: Optional[str], timeout: float) -> Dict[str, Any]:
