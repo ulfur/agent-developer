@@ -4,6 +4,8 @@ services:
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
+      args:
+        NIGHTSHIFT_CAPABILITIES: ${NIGHTSHIFT_CAPABILITIES:-cloud}
     restart: unless-stopped
     environment:
       AGENT_HOST: ${AGENT_HOST:-0.0.0.0}

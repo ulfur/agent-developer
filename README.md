@@ -1,6 +1,14 @@
-<p align="center">
-  <img src="frontend/nightshift-header-dark.svg" alt="Nightshift" width="280">
-</p>
+<table align="center" border="0" cellspacing="0" cellpadding="0">
+  <tr>
+    <td valign="middle" style="padding-right:12px;">
+      <img src="frontend/nightshift-header-dark.png" alt="Nightshift logo" width="48" height="48">
+    </td>
+    <td valign="middle">
+      <strong style="font-size:26px; line-height:1;">Nightshift</strong><br>
+      <span style="font-size:14px; color:#6c6c6c;">all day every day</span>
+    </td>
+  </tr>
+</table>
 
 # Nightshift
 
@@ -106,6 +114,11 @@ Use Human Tasks to log hardware/power blockers per device so operators can servi
 - `scripts/human_tasks.py` manages blocker entries and mirrors the UI controls.
 - `scripts/git_branch_smoke.py` sanity-checks git cleanliness/branch automation.
 - `scripts/nightshift_compose.sh smoke` is the gate for docker changes; `scripts/docker_backend_selfcheck.sh` runs under the hood.
+
+## Container Capabilities
+- Backend images default to a `cloud` capability set so they're safe to build on laptops/VMs without GPIO headers. No hardware-only packages are installed in this mode.
+- To layer in hardware support (E-ink/GPIO), set `NIGHTSHIFT_CAPABILITIES` to a comma-separated list (e.g., `cloud,gpio` or `cloud,eink`) before running `scripts/nightshift_compose.sh build|up`. Compose forwards the env var as a build arg, which unlocks the optional `python3-lgpio` dependency when the base OS provides it.
+- Hardware-specific env vars (all `EINK_*` plus `ENABLE_EINK_DISPLAY`) still control runtime behaviour; the capability flag only changes what the container image tries to install. This keeps CI/cloud builds lightweight while allowing Pi deployments to opt into the extra drivers intentionally.
 
 ## Auxiliary E-ink Display (7.8" IT8591/IT8951)
 1. Enable SPI via `raspi-config`, then install dependencies:

@@ -14,6 +14,7 @@
 - Run `./scripts/nightshift_compose.sh up|down|logs|smoke` to control the stack. The helper exports `NIGHTSHIFT_WORKSPACES_HOST` and `NIGHTSHIFT_REPO_HOST_PATH` before invoking `docker compose` so Pi and AWS installs share the same `/workspaces/nightshift` layout.
 - `/workspaces/nightshift` must contain the git checkout (bind-mounted from the host). Additional project repos that prompts operate on also live under `/workspaces/<project>`, so populate them from the host or remote filesystem (EFS/NFS) before queueing work.
 - After editing Dockerfiles or compose YAML, run `./scripts/nightshift_compose.sh smoke` to validate the compose config, rebuild images, and execute the backend/frontend self-checks that gate deployments.
+- Hardware-specific dependencies (GPIO/e-ink) are now opt-in: leave `NIGHTSHIFT_CAPABILITIES` unset (default `cloud`) for laptop/VM builds, or export `NIGHTSHIFT_CAPABILITIES=cloud,gpio` before running the compose helper when you need `python3-lgpio` baked into the backend image.
 
 ## Architecture & services
 ### Backend (`backend/server.py`)
