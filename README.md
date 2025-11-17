@@ -1,9 +1,9 @@
-<table align="center" border="0" cellspacing="0" cellpadding="0">
+<table align="center" border="0" cellspacing="0" cellpadding="0" width="100%">
   <tr>
-    <td valign="middle" style="padding-right:12px;">
-      <img src="frontend/nightshift-header-dark.png" alt="Nightshift logo" width="48" height="48">
+    <td valign="middle" width="64px">
+      <img src="frontend/nightshift-header-dark.png" alt="Nightshift logo" width="64" height="64">
     </td>
-    <td valign="middle">
+    <td valign="middle" >
       <strong style="font-size:26px; line-height:1;">Nightshift</strong><br>
       <span style="font-size:14px; color:#6c6c6c;">all day every day</span>
     </td>
