@@ -192,6 +192,26 @@
         overflow-x: hidden;
       }
 
+      .tunnel-overlay {
+        align-items: flex-start;
+        padding-top: 96px;
+      }
+
+      .tunnel-overlay__card {
+        max-width: 520px;
+        width: 92%;
+      }
+
+      .tunnel-overlay__details {
+        margin: 0 0 1rem;
+        padding-left: 1.1rem;
+        color: var(--text-muted);
+      }
+
+      .tunnel-overlay__details li {
+        margin-bottom: 0.25rem;
+      }
+
       .chat-card__header {
         display: flex;
         align-items: flex-start;
@@ -1255,7 +1275,7 @@
         color: var(--text-muted);
         letter-spacing: 0.08em;
         display: inline-block;
-        min-width: 16ch;
+        min-width: 24ch;
       }
 
       @media (max-width: 959px) {
@@ -2666,6 +2686,74 @@ Steps:
             }
             return 'Identity unavailable';
           });
+          const tunnelState = computed(() => {
+            const snapshot = health.value?.tunnel;
+            if (!snapshot || typeof snapshot !== 'object') {
+              return null;
+            }
+            return snapshot;
+          });
+          const tunnelBlocking = computed(() => {
+            const snapshot = tunnelState.value;
+            if (!snapshot) {
+              return false;
+            }
+            return Boolean(snapshot.required && !snapshot.healthy && !snapshot.lan_mode);
+          });
+          const tunnelChipLabel = computed(() => {
+            const snapshot = tunnelState.value;
+            if (!snapshot) {
+              return '';
+            }
+            if (snapshot.lan_mode) {
+              return 'Tunnel · LAN mode';
+            }
+            if (!snapshot.required) {
+              return snapshot.healthy ? 'Tunnel · Optional (ok)' : 'Tunnel · Optional';
+            }
+            if (snapshot.healthy) {
+              const ready = Number(snapshot.ready_connections) || 0;
+              return ready > 0 ? `Tunnel · Healthy (${ready})` : 'Tunnel · Healthy';
+            }
+            return 'Tunnel · Offline';
+          });
+          const tunnelChipColor = computed(() => {
+            const snapshot = tunnelState.value;
+            if (!snapshot) {
+              return 'secondary';
+            }
+            if (snapshot.lan_mode) {
+              return 'warning';
+            }
+            if (!snapshot.required) {
+              return snapshot.healthy ? 'primary' : 'info';
+            }
+            return snapshot.healthy ? 'success' : 'error';
+          });
+          const tunnelStatusText = computed(() => {
+            const snapshot = tunnelState.value;
+            if (!snapshot) {
+              return 'Cloudflare tunnel status unavailable.';
+            }
+            if (snapshot.lan_mode) {
+              return 'LAN override active — remote access restricted until the tunnel recovers.';
+            }
+            if (!snapshot.required) {
+              return snapshot.healthy
+                ? 'Tunnel is optional for this deployment and currently healthy.'
+                : 'Tunnel is optional; waiting for the first heartbeat.';
+            }
+            if (snapshot.healthy) {
+              const ready = Number(snapshot.ready_connections) || 0;
+              return ready > 0
+                ? `Connected to nghtshft.ai (${ready} ready ${ready === 1 ? 'link' : 'links'}).`
+                : 'Connected to nghtshft.ai.';
+            }
+            return 'Cloudflare heartbeat not detected — API access is blocked until the tunnel reconnects.';
+          });
+          const tunnelOverridePath = computed(
+            () => tunnelState.value?.lan_mode_override_path || ''
+          );
           const chatThreadRef = ref(null);
           const chatThreadHeight = ref(0);
           const liveStreamScrollRef = ref(null);
@@ -5964,6 +6052,12 @@ Steps:
             agentIdentityStatusText,
             agentIdentityHostname,
             agentIdentityId,
+            tunnelState,
+            tunnelChipLabel,
+            tunnelChipColor,
+            tunnelStatusText,
+            tunnelBlocking,
+            tunnelOverridePath,
             syncAgentIdentity,
             syncingAgentIdentity,
             agentIdentitySyncMessage,
@@ -6134,6 +6228,46 @@ Steps:
                 </v-card-actions>
               </v-card>
             </v-dialog>
+            <v-overlay
+              :model-value="tunnelBlocking"
+              persistent
+              scroll-strategy="block"
+              class="tunnel-overlay"
+            >
+              <v-card class="tunnel-overlay__card" elevation="12">
+                <v-card-title class="text-h6">
+                  Waiting on the Cloudflare tunnel
+                </v-card-title>
+                <v-card-subtitle>{{ tunnelStatusText }}</v-card-subtitle>
+                <v-card-text>
+                  <p class="mb-3">
+                    Nightshift keeps the API and UI offline until the nghtshft.ai tunnel heartbeat succeeds.
+                    Confirm that <code>cloudflared</code> is running with the issued credentials before retrying.
+                  </p>
+                  <v-alert type="error" variant="tonal" class="mb-3">
+                    Remote access is blocked until the tunnel reconnects or LAN override is explicitly enabled.
+                  </v-alert>
+                  <ul class="tunnel-overlay__details">
+                    <li v-if="tunnelState?.ready_url">
+                      Ready probe · {{ tunnelState.ready_url }}
+                    </li>
+                    <li v-if="tunnelState?.last_checked_at">
+                      Last check · {{ formatTimestamp(tunnelState.last_checked_at) }}
+                    </li>
+                    <li v-if="tunnelState?.last_error?.message">
+                      Last error · {{ tunnelState.last_error.message }}
+                    </li>
+                    <li>
+                      Cloudflared connections · {{ tunnelState?.ready_connections ?? 0 }}
+                    </li>
+                  </ul>
+                  <p class="text-body-2 text-medium-emphasis">
+                    If operations authorized LAN-only mode, set <code>ALLOW_LAN_MODE=1</code> or touch
+                    {{ tunnelOverridePath || 'config/lan_mode_override' }} for a temporary override.
+                  </p>
+                </v-card-text>
+              </v-card>
+            </v-overlay>
               <v-app-bar class="global-header" flat>
                 <v-app-bar-title>
                   <div class="global-header__branding">
@@ -7060,6 +7194,17 @@ Steps:
                           >
                             <span class="mdi mdi-account-badge" aria-hidden="true"></span>
                             <span>{{ agentIdentityChipLabel }}</span>
+                          </v-chip>
+                          <v-chip
+                            v-if="tunnelChipLabel"
+                            class="identity-chip"
+                            size="small"
+                            label
+                            :color="tunnelChipColor"
+                            variant="tonal"
+                          >
+                            <span class="mdi mdi-cloud-lock-outline" aria-hidden="true"></span>
+                            <span>{{ tunnelChipLabel }}</span>
                           </v-chip>
                         </div>
                       </v-card-title>

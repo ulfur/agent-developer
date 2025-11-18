@@ -1,0 +1,47 @@
+{
+    "status": "paired",
+    "agent": {
+        "id": "agent-devhost-eink",
+        "name": "Nightshift Dev Host",
+        "hardware": "raspberry-pi-5",
+        "workspace": "/home/ulfurk/devhost",
+        "branch": "instance/nightshift-devhost"
+    },
+    "control_plane": {
+        "api_base": "http://127.0.0.1:9090",
+        "paired_at": "2025-11-18T02:55:36.956645+00:00",
+        "last_synced_at": "2025-11-18T02:56:06.690237+00:00",
+        "device_id": "ns-devhost-eink"
+    },
+    "cloudflare": {
+        "hostname": "agent-devhost-eink.nghtshft.ai",
+        "tunnel_id": "cf-tunnel-devhost",
+        "account_id": "cfacct-nightshift"
+    },
+    "permissions": {
+        "repos": {
+            "allow": [
+                "nightshift",
+                "nebula-pulse"
+            ],
+            "deny": []
+        },
+        "workspaces": {
+            "allow": [
+                "/home/ulfurk/devhost",
+                "/workspaces/nightshift"
+            ],
+            "deny": []
+        }
+    },
+    "persona": {
+        "summary": "Paired Nightshift E-ink host",
+        "profile": "pi-eink"
+    },
+    "context": {
+        "queue": "nightshift-dev",
+        "notes": "staged bundle for pairing smoke",
+        "queue_header": "Nightshift Dev Host \u00b7 agent-devhost-eink.nghtshft.ai",
+        "status_chip": "paired"
+    }
+}

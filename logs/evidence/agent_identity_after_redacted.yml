@@ -1,0 +1,48 @@
+agent:
+  id: agent-devhost-eink
+  name: Nightshift Dev Host
+  branch: instance/nightshift-devhost
+  hardware: raspberry-pi-5
+  workspace: /home/ulfurk/devhost
+control_plane:
+  api_base: http://127.0.0.1:9090
+  auth_token: <redacted>
+  paired_at: '2025-11-18T02:55:36.956645+00:00'
+  last_synced_at: '2025-11-18T02:56:06.690237+00:00'
+  device_id: ns-devhost-eink
+permissions:
+  repos:
+    allow:
+    - nightshift
+    - nebula-pulse
+    deny: []
+  workspaces:
+    allow:
+    - /home/ulfurk/devhost
+    - /workspaces/nightshift
+    deny: []
+pm:
+  monday:
+    api_token: <redacted>
+    board_id: nightshift-dev-board
+    workspace_id: nightshift-dev-workspace
+    inbox_group_id: incoming-items
+cloudflare:
+  hostname: agent-devhost-eink.nghtshft.ai
+  tunnel_id: cf-tunnel-devhost
+  account_id: cfacct-nightshift
+  team: nightshift
+  cert_path: /etc/cloudflared/cert.pem
+  ingress_rule: nightshift-devhost
+persona:
+  summary: Paired Nightshift E-ink host
+  profile: pi-eink
+context:
+  queue: nightshift-dev
+  notes: staged bundle for pairing smoke
+  queue_header: "Nightshift Dev Host \xB7 agent-devhost-eink.nghtshft.ai"
+  status_chip: paired
+secrets:
+  codex: <redacted>
+  cloudflare_cert: <redacted>
+received_at: '2025-11-18T02:55:36.956645+00:00'

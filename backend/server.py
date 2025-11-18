@@ -46,6 +46,7 @@ from log_utils import extract_stdout_preview
 from preferences import PreferenceStore
 from router_config import TraefikConfigManager
 from ssh_keys import SSHKeyError, SSHKeyManager
+from tunnel_monitor import CloudflareTunnelMonitor
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -107,6 +108,12 @@ def _env_flag(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 REQUIRE_CONTROL_PLANE_IDENTITY = _env_flag("REQUIRE_CONTROL_PLANE_IDENTITY", False)
+REQUIRE_TUNNEL_HEALTH = _env_flag("REQUIRE_TUNNEL_HEALTH", True)
+LAN_MODE_ENV_OVERRIDE = _env_flag("ALLOW_LAN_MODE", False)
+LAN_MODE_OVERRIDE_PATH = Path(os.environ.get("LAN_MODE_OVERRIDE_PATH", str(CONFIG_DIR / "lan_mode_override")))
+TUNNEL_READY_URL = os.environ.get("TUNNEL_READY_URL", "http://127.0.0.1:43100/ready")
+TUNNEL_HEALTH_INTERVAL = float(os.environ.get("TUNNEL_HEALTH_INTERVAL", "5"))
+TUNNEL_HEALTH_TIMEOUT = float(os.environ.get("TUNNEL_HEALTH_TIMEOUT", "2"))
 
 def utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -2190,6 +2197,15 @@ class PromptWorker(threading.Thread):
             if REQUIRE_CONTROL_PLANE_IDENTITY and identity_manager and not identity_manager.is_paired():
                 time.sleep(1)
                 continue
+            tunnel_monitor: Optional[CloudflareTunnelMonitor] = APP_CONTEXT.get("tunnel_monitor")
+            if (
+                REQUIRE_TUNNEL_HEALTH
+                and tunnel_monitor
+                and not tunnel_monitor.is_healthy()
+                and not tunnel_monitor.lan_mode_enabled()
+            ):
+                time.sleep(1)
+                continue
             prompt_id = self.store.next_prompt_id()
             if not prompt_id:
                 continue
@@ -2624,6 +2640,7 @@ class EventStreamer:
         human_tasks: Optional[HumanTaskStore] = None,
         environments: Optional[EnvironmentStore] = None,
         identity: Optional[AgentIdentityManager] = None,
+        tunnel_monitor: Optional[CloudflareTunnelMonitor] = None,
     ):
         self.store = store
         self.logger = logger
@@ -2632,6 +2649,7 @@ class EventStreamer:
         self.human_tasks = human_tasks
         self.environments = environments
         self.identity_manager = identity
+        self.tunnel_monitor = tunnel_monitor
 
     def broadcast_queue(self, targets: Optional[Iterable[WebSocketConnection]] = None) -> None:
         snapshot = self.store.list_prompts()
@@ -2684,6 +2702,8 @@ class EventStreamer:
         }
         if self.identity_manager:
             payload["identity"] = self.identity_manager.public_payload()
+        if self.tunnel_monitor:
+            payload["tunnel"] = self.tunnel_monitor.status_payload()
         self.ws_manager.broadcast("health", payload, targets=targets)
 
     def send_initial_state(self, connection: WebSocketConnection) -> None:
@@ -2716,6 +2736,10 @@ class HealthBroadcaster(threading.Thread):
 
 class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
     server_version = "AgentDevServer/0.1"
+    _TUNNEL_ALLOWED_BY_METHOD: Dict[str, set[str]] = {
+        "GET": {"/api/health", "/api/agent/identity"},
+        "POST": {"/api/login", "/api/agent/identity/sync"},
+    }
 
     def __init__(self, *args: Any, directory: Optional[str] = None, **kwargs: Any) -> None:
         self.current_user: Optional[AuthenticatedUser] = None
@@ -2746,6 +2770,9 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/ws":
+            if self._tunnel_guard_active():
+                self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Cloudflare tunnel unavailable")
+                return
             self._handle_websocket()
         elif self.path.startswith("/api/"):
             self._handle_api_get()
@@ -2779,6 +2806,9 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
         parsed = urlsplit(self.path)
         clean_path = parsed.path.rstrip("/") or "/"
         query_params = parse_qs(parsed.query)
+        if self._tunnel_blocked(clean_path):
+            self._write_tunnel_blocked()
+            return
         if clean_path == "/api/projects":
             registry: Optional[ProjectRegistry] = APP_CONTEXT.get("projects")
             if registry:
@@ -2811,6 +2841,9 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             identity_manager: Optional[AgentIdentityManager] = APP_CONTEXT.get("identity")
             if identity_manager:
                 payload["identity"] = identity_manager.public_payload()
+            tunnel_monitor: Optional[CloudflareTunnelMonitor] = APP_CONTEXT.get("tunnel_monitor")
+            if tunnel_monitor:
+                payload["tunnel"] = tunnel_monitor.status_payload()
             self._write_json(payload)
         elif clean_path == "/api/prompts":
             payload = APP_CONTEXT["store"].list_prompts()
@@ -2892,6 +2925,9 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
             self._handle_login()
             return
         if not self._require_auth():
+            return
+        if self._tunnel_blocked(clean_path):
+            self._write_tunnel_blocked()
             return
         if clean_path == "/api/agent/identity/sync":
             identity_manager: Optional[AgentIdentityManager] = APP_CONTEXT.get("identity")
@@ -3000,6 +3036,20 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
                 "Overlay posted title=%s duration=%s", title, duration_sec or "indefinite"
             )
             self._write_json({"status": "overlay_scheduled", "overlay": overlay})
+        elif clean_path == "/api/eink/selftest":
+            manager = APP_CONTEXT.get("display_manager")
+            if not manager:
+                self._write_json({"error": "e-ink display unavailable"}, status=503)
+                return
+            def _run_selftest() -> None:
+                try:
+                    ok = manager.run_section_selftest()
+                    if not ok:
+                        APP_CONTEXT["audit_logger"].warning("E-ink section self-test reported failure")
+                except Exception:
+                    APP_CONTEXT["audit_logger"].exception("E-ink section self-test crashed")
+            threading.Thread(target=_run_selftest, daemon=True).start()
+            self._write_json({"status": "selftest_running"})
         elif clean_path == "/api/human_tasks":
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
@@ -3234,6 +3284,9 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
         if not self._require_auth():
             return
         clean_path = self.path.split("?", 1)[0].rstrip("/")
+        if self._tunnel_blocked(clean_path):
+            self._write_tunnel_blocked()
+            return
         if clean_path.startswith("/api/human_tasks/"):
             task_id = clean_path.rsplit("/", 1)[-1]
             length = int(self.headers.get("Content-Length", 0))
@@ -3361,6 +3414,9 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
 
     def _handle_api_put(self) -> None:
         clean_path = self.path.split("?", 1)[0]
+        if self._tunnel_blocked(clean_path.rstrip("/")):
+            self._write_tunnel_blocked()
+            return
         if clean_path == "/api/preferences/theme":
             self._handle_theme_preference_update()
             return
@@ -3406,6 +3462,9 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
         if not self._require_auth():
             return
         clean_path = self.path.split("?", 1)[0]
+        if self._tunnel_blocked(clean_path.rstrip("/")):
+            self._write_tunnel_blocked()
+            return
         normalized_path = clean_path.rstrip("/")
         if normalized_path == "/api/eink/overlay":
             manager = APP_CONTEXT.get("display_manager")
@@ -3606,6 +3665,34 @@ class AgentHTTPRequestHandler(SimpleHTTPRequestHandler):
         self.current_user = user
         return True
 
+    def _tunnel_guard_active(self) -> bool:
+        monitor: Optional[CloudflareTunnelMonitor] = APP_CONTEXT.get("tunnel_monitor")
+        if not monitor:
+            return False
+        status = monitor.status_payload()
+        if not status.get("required"):
+            return False
+        if monitor.lan_mode_enabled():
+            return False
+        return not monitor.is_healthy()
+
+    def _tunnel_blocked(self, clean_path: str) -> bool:
+        if not self._tunnel_guard_active():
+            return False
+        normalized = (clean_path or "").rstrip("/") or "/"
+        allowed = self._TUNNEL_ALLOWED_BY_METHOD.get(self.command.upper(), set())
+        if normalized in allowed:
+            return False
+        return True
+
+    def _write_tunnel_blocked(self) -> None:
+        payload: Dict[str, Any] = {"error": "cloudflare tunnel unavailable"}
+        monitor: Optional[CloudflareTunnelMonitor] = APP_CONTEXT.get("tunnel_monitor")
+        if monitor:
+            payload["tunnel"] = monitor.status_payload()
+        payload["lan_mode_override_path"] = str(LAN_MODE_OVERRIDE_PATH)
+        self._write_json(payload, status=503)
+
 
 def configure_logging() -> logging.Logger:
     GENERAL_LOG_PATH.touch(exist_ok=True)
@@ -3657,15 +3744,22 @@ def start_display_manager(
     )
     power_monitor = None
     power_cache = None
-    power_update_callback = None
-    if events:
-        def _handle_power_update(payload: dict[str, Any]) -> None:
+    manager_ref: dict[str, TaskQueueDisplayManager | None] = {"instance": None}
+
+    def _handle_power_update(payload: dict[str, Any]) -> None:
+        if events:
             try:
                 events.broadcast_power_status(payload)
             except Exception:  # pragma: no cover - defensive logging
                 logger.debug("Failed to broadcast power status snapshot")
+        manager = manager_ref.get("instance")
+        if manager:
+            try:
+                manager.handle_power_cache_update(payload)
+            except Exception:
+                logger.debug("Power cache callback failed", exc_info=True)
 
-        power_update_callback = _handle_power_update
+    power_update_callback = _handle_power_update
     if _env_flag("ENABLE_UPS_TELEMETRY", True):
         try:
             from eink.power import PowerTelemetryCache, X1201PowerMonitor
@@ -3679,7 +3773,7 @@ def start_display_manager(
             power_cache = PowerTelemetryCache(on_update=power_update_callback)
         except Exception as exc:
             logger.warning("UPS telemetry unavailable: %s", exc)
-    power_poll_interval = float(os.environ.get("UPS_POLL_INTERVAL_SEC", "10"))
+    power_poll_interval = float(os.environ.get("UPS_POLL_INTERVAL_SEC", "1"))
     overlay_fast_mode = _env_flag("EINK_OVERLAY_FAST_MODE", False)
     manager = TaskQueueDisplayManager(
         store,
@@ -3693,6 +3787,7 @@ def start_display_manager(
         power_poll_interval_sec=power_poll_interval,
         overlay_fast_mode=overlay_fast_mode,
     )
+    manager_ref["instance"] = manager
     manager.start()
     return manager, power_cache
 
@@ -3743,6 +3838,16 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         ssh_key_manager.ensure_default_keys()
     except SSHKeyError as exc:
         audit_logger.error("SSH key initialization failed: %s", exc)
+    tunnel_monitor = CloudflareTunnelMonitor(
+        TUNNEL_READY_URL,
+        interval_seconds=TUNNEL_HEALTH_INTERVAL,
+        timeout_seconds=TUNNEL_HEALTH_TIMEOUT,
+        required=REQUIRE_TUNNEL_HEALTH,
+        lan_override_enabled=LAN_MODE_ENV_OVERRIDE,
+        lan_override_path=LAN_MODE_OVERRIDE_PATH,
+        logger=audit_logger,
+    )
+    tunnel_monitor.start()
     ws_manager = WebSocketManager(auth_manager, audit_logger)
     events = EventStreamer(
         store,
@@ -3752,6 +3857,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         human_task_store,
         environment_store,
         identity=identity_manager,
+        tunnel_monitor=tunnel_monitor,
     )
     ws_manager.event_streamer = events
     recovered_prompt_ids = store.consume_recovered_prompts()
@@ -3816,6 +3922,7 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         "preferences": preference_store,
         "router_manager": router_manager,
         "identity": identity_manager,
+        "tunnel_monitor": tunnel_monitor,
     }
     if recovered_prompt_ids:
         schedule_display_refresh("recovered prompts")
@@ -3834,6 +3941,8 @@ def main(host: str = "0.0.0.0", port: int = 8080) -> None:
         health_thread.stop()
         health_thread.join(timeout=5)
         router_manager.stop()
+        tunnel_monitor.stop()
+        tunnel_monitor.join(timeout=5)
 
 
 if __name__ == "__main__":

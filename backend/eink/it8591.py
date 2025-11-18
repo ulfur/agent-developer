@@ -114,25 +114,30 @@ class IT8591DisplayDriver:
         x, y, w, h = self._normalize_bounds(bounds)
         if w <= 0 or h <= 0:
             return
-        hw_x, hw_y = self._transform_coordinates(x, y, w, h)
         self._logger.debug(
-            "display_region bounds=%s,%s,%s,%s -> hw=%s,%s",
+            "display_region bounds=%s,%s,%s,%s",
             x,
             y,
             w,
             h,
-            hw_x,
-            hw_y,
         )
         with self._lock:
-            prepared = self._prepare_region(image, x, y, w, h)
+            region = self._ensure_region_size(image, w, h)
+            prepared = self._pack_grayscale(region, w)
             self._wait_for_display_ready()
-            self._write_frame_4bpp(prepared, hw_x, hw_y, w, h)
+            self._write_frame_4bpp(prepared, x, y, w, h)
             # Some firmware revisions ignore USDEF_I80_CMD_DPY_AREA when rotation is enabled;
             # fall back to full-frame refresh for stability when partial rendering fails.
             try:
-                self._display_area(hw_x, hw_y, w, h, mode)
+                self._display_area(x, y, w, h, mode)
             except Exception:
+                self._logger.warning(
+                    "display_region fallback to full-frame refresh x=%s y=%s size=%sx%s",
+                    x,
+                    y,
+                    w,
+                    h,
+                )
                 self._display_area(0, 0, self.width, self.height, mode)
             self._wait_for_display_ready()
 
@@ -354,9 +359,11 @@ class IT8591DisplayDriver:
             image = image.resize((self.width, self.height))
         return self._pack_grayscale(image, self.width)
 
-    def _prepare_region(self, image: Image.Image, x: int, y: int, w: int, h: int) -> bytearray:
-        region = image.crop((x, y, x + w, y + h))
-        return self._pack_grayscale(region, region.width)
+    def _ensure_region_size(self, image: Image.Image, w: int, h: int) -> Image.Image:
+        if image.size == (w, h):
+            return image
+        resized = image.resize((w, h))
+        return resized
 
     def _pack_grayscale(self, image: Image.Image, stride: int) -> bytearray:
         gray = image.convert("L")

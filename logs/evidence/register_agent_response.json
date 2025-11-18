@@ -1,0 +1,10 @@
+{
+    "status": "ok",
+    "agent": {
+        "id": "agent-devhost-eink",
+        "name": "Nightshift Dev Host",
+        "branch": "instance/nightshift-devhost",
+        "hardware": "raspberry-pi-5",
+        "workspace": "/home/ulfurk/devhost"
+    }
+}

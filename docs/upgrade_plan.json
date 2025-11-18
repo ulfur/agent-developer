@@ -21,10 +21,12 @@
       "prompt": "Re-read ROADMAP.md (with the latest updates) and docs/upgrade_plan.json. Based on the audit findings, define the next set of prompts Nightshift should tackle, update docs/upgrade_plan.json with those tasks (including priorities), and enqueue the first batch so the queue keeps moving. Document the new prompt IDs in logs/progress.log, ensure each prompt instructs future agents to re-read ROADMAP.md, and create follow-up prompts or Human Tasks wherever necessary.",
       "project_id": "nightshift",
       "priority": 0,
-      "status": "queued",
+      "status": "completed",
       "last_prompt_id": "d900dac0bf4248ddb6f81d1b953f29c3",
       "last_queued_at": "2025-11-16T10:14:33.216339+00:00",
-      "queued_count": 2
+      "queued_count": 2,
+      "completed_at": "2025-11-16T10:23:23.100959+00:00",
+      "notes": "Prompt d900dac0bf4248ddb6f81d1b953f29c3 refreshed the backlog and queued Phase 1/2 follow-ups; see logs/progress.log:12263."
     },
     {
       "id": "short-term-roadmap-plan",
@@ -33,10 +35,12 @@
       "prompt": "Start by re-reading ROADMAP.md, roadmap_updates.md, docs/upgrade_plan.json, and logs/progress.log so you are working from the latest priorities. Summarize the most urgent roadmap themes, then draft a short-term (next 2\u20133 prompts) execution plan that cites the relevant roadmap sections and gaps. Update docs/upgrade_plan.json with the concrete follow-up prompts (including priorities and the recursion instructions about reading the planning docs, verifying queue additions, and carrying those instructions forward). Queue at least the first prompt from that plan, verify every queued prompt appears in both data/prompts.json and logs/progress.log, and record the prompt IDs plus verification evidence in logs/progress.log and your final response. Ensure each new prompt explicitly tells its assignee to re-read the planning docs, confirm any follow-up tasks they queue are persisted in both places, and to propagate those directions recursively before marking this task complete.",
       "project_id": "nightshift",
       "priority": 0,
-      "status": "queued",
+      "status": "completed",
       "last_prompt_id": "b15c6e64939a470982f2fcab5dbcce8b",
       "last_queued_at": "2025-11-17T00:46:42.094666+00:00",
-      "queued_count": 2
+      "queued_count": 2,
+      "completed_at": "2025-11-17T00:53:06.905408+00:00",
+      "notes": "Prompt b15c6e64939a470982f2fcab5dbcce8b shipped the recursive short-term plan plus queue verification notes (logs/progress.log:13185)."
     },
     {
       "id": "human-task-control-plane-credential-bundle",
@@ -46,11 +50,12 @@
       "prompt": "Before provisioning secrets, re-read ROADMAP.md (Phase 0.4/1.4), roadmap_updates.md \u00a7\u00a71-2, and docs/upgrade_plan.json. Gather or refresh the Cloudflare tunnel credentials, nghtshft.ai control-plane API tokens, and Monday sandbox tokens the pairing bootstrap will request; store them in the operator vault and the ~/.config/systemd env files Nightshift loads. Any prompt or Human Task you queue must appear in both data/prompts.json (or an /api/prompts response) and logs/progress.log\u2014record each ID plus the verification evidence (file path + timestamp) inside logs/progress.log and in your final response, and make sure every follow-up inherits this re-read + verification requirement before work begins.",
       "project_id": "nightshift",
       "priority": 0,
-      "status": "pending",
+      "status": "completed",
       "queued_count": 0,
       "last_prompt_id": null,
       "last_queued_at": null,
-      "notes": "Human Task: ops gather control-plane + tunnel credentials so pairing can proceed."
+      "notes": "Operators staged the Cloudflare tunnel + Monday credential bundle and cleared the human task (logs/progress.log:17301); pairing verification now unblocked.",
+      "completed_at": "2025-11-18T02:28:15.406000+00:00"
     },
     {
       "id": "agent-identity-control-plane-bootstrap",
@@ -69,6 +74,39 @@
       "last_queued_at": "2025-11-17T08:56:10.565006+00:00",
       "completed_at": "2025-11-17T09:06:05+00:00",
       "notes": "Delivered agent identity manager, pairing code UX/logging, /register-agent handler, config/agent_identity.yml template, GET /agent/:id/config sync, and operator smoke tests."
+    },
+    {
+      "id": "control-plane-pairing-smoke",
+      "title": "Complete the nghtshft.ai pairing handshake",
+      "description": "Finish Phase 0.4/1.4 by exercising the new pairing flow end-to-end so this device stops logging the degraded \u201cAwaiting control-plane pairing\u201d state.",
+      "dependencies": [
+        "human-task-control-plane-credential-bundle",
+        "agent-identity-control-plane-bootstrap"
+      ],
+      "prompt": "Re-read ROADMAP.md (Phase 0.4/1.4), roadmap_updates.md \u00a7\u00a71\u20132, docs/upgrade_plan.json, and the recent logs/progress.log entries (e.g., line 13781) calling out the \u201cAwaiting control-plane pairing\u201d warning. Use the staged credential bundle to drive POST /register-agent + GET /agent/:id/config until config/agent_identity.yml contains the issued agent metadata, then verify the queue header, /api/agent/identity, and the e-ink footer all reflect the paired status. Capture the before/after evidence in logs/progress.log (timestamps + file paths), update README/agents.md with the new verification steps, and ensure every follow-up prompt or Human Task you queue is written to both data/prompts.json (or /api/prompts) and logs/progress.log along with instructions to keep re-reading these planning docs before executing.",
+      "project_id": "nightshift",
+      "priority": 0,
+      "status": "queued",
+      "queued_count": 1,
+      "last_prompt_id": "c2dc505e2f914ac5bddf3f0278d0b130",
+      "last_queued_at": "2025-11-18T02:41:13.192212+00:00",
+      "notes": "Backend still spams \u201cAwaiting control-plane pairing\u201d (logs/progress.log:13781+); run the handshake now that credentials are staged."
+    },
+    {
+      "id": "control-plane-cloudflared-health",
+      "title": "Bundle cloudflared and gate on tunnel health",
+      "description": "Phase 1.4 still needs cloudflared packaged with Compose/CDK plus health gating so the API/UI stay dark until the nghtshft.ai tunnel is online.",
+      "dependencies": [
+        "control-plane-pairing-smoke"
+      ],
+      "prompt": "Start by re-reading ROADMAP.md \u00a71.4, roadmap_updates.md \u00a72.4, docs/upgrade_plan.json, and the latest progress log entries tied to control-plane bootstrap. Package cloudflared with docker-compose and cdk/ so agents install the daemon automatically, load the issued tunnel credentials, and add health checks that block /api + the UI until the tunnel heartbeat succeeds (fallback to LAN mode only when explicitly requested). Surface tunnel status in /api/health + the queue header chips, document operator runbooks (README.md + docs/router_operations.md), and commit the updated systemd/service files. As always, record every prompt/human-task ID plus verification evidence in logs/progress.log and data/prompts.json, and propagate the instruction to re-read these planning docs before executing follow-up work.",
+      "project_id": "nightshift",
+      "priority": 1,
+      "status": "queued",
+      "queued_count": 1,
+      "last_prompt_id": "ef474a0aaa4f42a2a8cf6622082d05db",
+      "last_queued_at": "2025-11-18T02:41:13.916252+00:00",
+      "notes": "ROADMAP Phase 1.4 and roadmap_updates.md \u00a72.4 call for packaged tunnels + health-gated APIs; no prompt has tackled this yet."
     },
     {
       "id": "monday-ingestion-sync",
@@ -94,11 +132,12 @@
       "prompt": "Before granting access, re-read ROADMAP.md (Phase 2.5), roadmap_updates.md \u00a73, and docs/upgrade_plan.json. Create or select a Monday sandbox board for Nightshift, document the item/column IDs that map to prompt metadata, generate an API token + webhook target, and place the credentials in the operator vault plus Nightshift secret files. Any prompt or Human Task you create while doing this must show up in both data/prompts.json (or the /api/prompts response) and logs/progress.log; record the IDs and verification evidence (file path + timestamp) inside logs/progress.log and your final response, and propagate these planning/verification steps to all follow-ups.",
       "project_id": "nightshift",
       "priority": 1,
-      "status": "pending",
-      "queued_count": 0,
-      "last_prompt_id": null,
-      "last_queued_at": null,
-      "notes": "Human Task: coordinate Monday API creds + board metadata."
+      "status": "completed",
+      "queued_count": 1,
+      "last_prompt_id": "054b1acac2bc44198e3995413a4bcffb",
+      "last_queued_at": "2025-11-18T02:41:15.124397+00:00",
+      "completed_at": "2025-11-18T03:28:30.000000+00:00",
+      "notes": "Monday sandbox board 6049808653 + column IDs captured in docs/monday_sandbox.md and data/pm_integrations.json; operator vault + ~/.config/systemd/user/nightshift.env now store api_token/webhook secrets (see logs/progress.log 2025-11-18T03:29Z)."
     },
     {
       "id": "queue-metrics-watchdog",
@@ -140,9 +179,9 @@
       "project_id": "nightshift",
       "priority": 1,
       "status": "queued",
-      "queued_count": 1,
-      "last_prompt_id": "da053bd288674c19ad52592cb06c7a58",
-      "last_queued_at": "2025-11-15T06:42:37.495770+00:00"
+      "queued_count": 0,
+      "last_prompt_id": null,
+      "last_queued_at": null
     },
     {
       "id": "upgrade-prompt-logs-cli",
@@ -152,9 +191,9 @@
       "project_id": "nightshift",
       "priority": 2,
       "status": "queued",
-      "queued_count": 1,
-      "last_prompt_id": "02340ce106c54bfdabbadcc50fd3c0f1",
-      "last_queued_at": "2025-11-15T06:42:37.497161+00:00"
+      "queued_count": 0,
+      "last_prompt_id": null,
+      "last_queued_at": null
     },
     {
       "id": "upgrade-frontend-filters",
@@ -164,9 +203,9 @@
       "project_id": "nightshift",
       "priority": 3,
       "status": "queued",
-      "queued_count": 1,
-      "last_prompt_id": "87cdc9a0ffab4628a019ca681a942d41",
-      "last_queued_at": "2025-11-15T06:42:37.502451+00:00"
+      "queued_count": 0,
+      "last_prompt_id": null,
+      "last_queued_at": null
     },
     {
       "id": "upgrade-env-ui-polish",
@@ -200,9 +239,9 @@
       "project_id": "nightshift",
       "priority": 4,
       "status": "queued",
-      "queued_count": 1,
-      "last_prompt_id": "1e3ad202aa8b40fc9744b658d87e6a10",
-      "last_queued_at": "2025-11-15T06:42:37.507402+00:00"
+      "queued_count": 0,
+      "last_prompt_id": null,
+      "last_queued_at": null
     },
     {
       "id": "phase0-git-discipline",
@@ -295,10 +334,12 @@
       "prompt": "Start by re-reading ROADMAP.md (Phase 2.1) and docs/upgrade_plan.json. Inventory the existing projects/* metadata, design a richer project specification schema (repo/source URLs, default branches, runtime/toolchain requirements, env vars/secrets, smoke tests, and operator contacts), and implement validation helpers so ProjectRegistry and /api/projects enforce it. Populate the new schema for all current projects, publish docs explaining how to add new specs, and capture migration/testing notes in logs/progress.log. Queue follow-up prompts or Human Tasks if additional repos need onboarding or if operators must supply secrets.",
       "project_id": "nightshift",
       "priority": 0,
-      "status": "queued",
+      "status": "completed",
       "queued_count": 1,
       "last_prompt_id": "301c772903ae4802a946d1b6afa02dcc",
-      "last_queued_at": "2025-11-16T10:22:11.038458+00:00"
+      "last_queued_at": "2025-11-16T10:22:11.038458+00:00",
+      "completed_at": "2025-11-16T10:36:36.347082+00:00",
+      "notes": "Prompt 301c772903ae4802a946d1b6afa02dcc delivered the Phase 2.1 schema + docs (logs/progress.log:12274)."
     },
     {
       "id": "phase2-environment-registry",
@@ -335,10 +376,12 @@
       "prompt": "Start by re-reading ROADMAP.md (Phase 2.4) and docs/upgrade_plan.json. Update the Vue/Vuetify frontend to consume the new project/environment APIs, render searchable tables/cards with status badges, quick-launch links, and integration points with the Human Tasks queue. Stream updates over WebSockets where possible, document UX changes, and add regression tests. Record the rollout in logs/progress.log and queue follow-up prompts if further UX polish or permissions work is required.",
       "project_id": "nightshift",
       "priority": 3,
-      "status": "queued",
+      "status": "completed",
       "queued_count": 1,
       "last_prompt_id": "6059130d3b5d4fac84e6a66ed54cc277",
-      "last_queued_at": "2025-11-16T11:19:41.230647+00:00"
+      "last_queued_at": "2025-11-16T11:19:41.230647+00:00",
+      "completed_at": "2025-11-16T11:57:37.347200+00:00",
+      "notes": "Prompt 6059130d3b5d4fac84e6a66ed54cc277 landed the environment directory UI and websocket refresh (logs/progress.log:12384)."
     },
     {
       "id": "restore-queue-ux-plan",
@@ -361,10 +404,12 @@
       "prompt": "Re-read the_project.txt, README.md, ROADMAP.md, agents.md, projects/nightshift/agents.md, docs/upgrade_plan.json, and the planning notes from restore-queue-ux-plan. Update frontend/index.html (and any supporting modules) so the Task Queue list, composer, and conversation thread remain visible without scrolling past the workspace cards, add responsive behaviours for mobile/desktop, and keep the real-time websocket stream+retry controls working. Ensure any backend API changes stay backward compatible, refresh docs/screenshots as needed, run the usual frontend/backend verifications (py_compile, lint, smoke tests), and summarize the rollout plus follow-ups in logs/progress.log.",
       "project_id": "nightshift",
       "priority": 1,
-      "status": "queued",
+      "status": "completed",
       "queued_count": 1,
       "last_prompt_id": "fdf4d3df578042c89e4a19878e395381",
-      "last_queued_at": "2025-11-16T17:46:06.204391+00:00"
+      "last_queued_at": "2025-11-16T17:46:06.204391+00:00",
+      "completed_at": "2025-11-16T18:08:51.202676+00:00",
+      "notes": "Prompt fdf4d3df578042c89e4a19878e395381 restored the Task Queue composer/list layout per logs/progress.log:12469."
     },
     {
       "id": "restore-queue-backend-ordering",
@@ -373,10 +418,12 @@
       "prompt": "Re-read the_project.txt, README.md, ROADMAP.md, agents.md, projects/nightshift/agents.md, docs/upgrade_plan.json, and the restore-queue-ux-plan notes. Update PromptStore.list_prompts plus the /api/prompts + WebSocket payloads so queue snapshots return queued prompts ordered by enqueued_at, running prompts ordered by started_at, and append terminal items afterward. Include a queue_position (FIFO index within queued/running) and explicit status buckets so the frontend can render badges without guessing. Keep backward compatibility for existing fields, document the schema changes, add tests for the ordering rules, refresh frontend/index.html to consume the new metadata, and summarize the rollout + verifications in logs/progress.log.",
       "project_id": "nightshift",
       "priority": 1,
-      "status": "queued",
+      "status": "completed",
       "queued_count": 1,
       "last_prompt_id": "4ea2193992ff4b40b81616f6bd3fc87f",
-      "last_queued_at": "2025-11-16T17:51:36.407040+00:00"
+      "last_queued_at": "2025-11-16T17:51:36.407040+00:00",
+      "completed_at": "2025-11-16T18:26:10.184316+00:00",
+      "notes": "Prompt 4ea2193992ff4b40b81616f6bd3fc87f fixed FIFO ordering + queue_position metadata (logs/progress.log:12474)."
     },
     {
       "id": "env-dns-nebulapulse-preview",
@@ -385,7 +432,9 @@
       "prompt": "Operators need to provision DNS records + TLS certificates for preview.nebulapulse.local and wire them into Traefik. Document the steps/logs once finished.",
       "project_id": "nightshift",
       "priority": 2,
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2025-11-18T02:28:07.041000+00:00",
+      "notes": "Ops closed env-task-dns-nebulapulse after provisioning preview.nebulapulse.local DNS/TLS (logs/progress.log:17294)."
     },
     {
       "id": "env-credentials-nightshift-dev",
@@ -394,7 +443,9 @@
       "prompt": "Audit the secrets referenced in the environment registry (agent password, operator SSH keys, Traefik router creds) and update the operator vault / host files as needed.",
       "project_id": "nightshift",
       "priority": 3,
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2025-11-18T02:28:16.992000+00:00",
+      "notes": "Host credentials synced and env-task-credentials-nightshift removed (logs/progress.log:17303)."
     },
     {
       "id": "env-tls-nightshift-dev",
@@ -403,8 +454,10 @@
       "prompt": "Operators must provision the certificates referenced by metadata.router.tls for env-nightshift-dev, copy them onto the host, and reload Traefik. Share thumbprints + DNS updates in #nightshift-ops.",
       "project_id": "nightshift",
       "priority": 2,
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2025-11-18T02:28:18.320000+00:00",
+      "notes": "Operators renewed the *.nightshift.local certs and deleted env-task-tls-nightshift (logs/progress.log:17304)."
     }
   ],
-  "generated_at": "2025-11-17T00:51:15+00:00"
+  "generated_at": "2025-11-18T02:34:50+00:00"
 }

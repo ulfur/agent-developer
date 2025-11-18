@@ -152,13 +152,39 @@ class NightshiftStack(Stack):
             'REGION="${AZ%?}"',
             'PKG_MGR="yum"',
             'if command -v apt-get >/dev/null 2>&1; then PKG_MGR="apt"; fi',
-            'if [[ "$PKG_MGR" == "yum" ]]; then sudo yum install -y amazon-efs-utils nfs-utils; '
-            'else sudo apt-get update && sudo apt-get install -y amazon-efs-utils nfs-common; fi',
+            'if [[ "$PKG_MGR" == "yum" ]]; then sudo yum install -y amazon-efs-utils nfs-utils curl; '
+            'else sudo apt-get update && sudo apt-get install -y amazon-efs-utils nfs-common curl; fi',
             'sudo mkdir -p "$MOUNT_DIR"',
             'ENDPOINT="${FILE_SYSTEM_ID}.efs.${REGION}.amazonaws.com:/"',
             'if ! grep -q "$ENDPOINT" /etc/fstab; then '
             'echo "$ENDPOINT $MOUNT_DIR efs defaults,_netdev" | sudo tee -a /etc/fstab >/dev/null; fi',
             "sudo mount -a -t efs defaults || true",
+            'if ! command -v cloudflared >/dev/null 2>&1; then '
+            'ARCH="$(uname -m)"; '
+            'PKG_ARCH="amd64"; '
+            'if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then PKG_ARCH="arm64"; fi; '
+            'curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${PKG_ARCH}" '
+            '-o /tmp/cloudflared && sudo install -m 0755 /tmp/cloudflared /usr/local/bin/cloudflared && rm -f /tmp/cloudflared; '
+            'fi',
+            "sudo mkdir -p /etc/cloudflared",
+            "cat <<'EOF' | sudo tee /etc/systemd/system/cloudflared.service >/dev/null",
+            "[Unit]",
+            "Description=Cloudflare tunnel (Nightshift)",
+            "After=network-online.target",
+            "Wants=network-online.target",
+            "ConditionPathExists=/etc/cloudflared/config.yml",
+            "",
+            "[Service]",
+            "Type=simple",
+            "ExecStart=/usr/local/bin/cloudflared tunnel --config /etc/cloudflared/config.yml --no-autoupdate run",
+            "Restart=always",
+            "RestartSec=5",
+            "",
+            "[Install]",
+            "WantedBy=multi-user.target",
+            "EOF",
+            "sudo systemctl daemon-reload",
+            "sudo systemctl enable cloudflared.service || true",
         )
 
         asg = autoscaling.AutoScalingGroup(

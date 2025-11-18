@@ -1,0 +1,112 @@
+{
+    "status": "ok",
+    "timestamp": "2025-11-18T02:56:23.494592+00:00",
+    "pending": 2,
+    "metrics": {
+        "status_counts": {
+            "queued": 2,
+            "running": 1,
+            "server_restarting": 0,
+            "completed": 355,
+            "failed": 18,
+            "canceled": 13
+        },
+        "oldest": {
+            "queued": {
+                "prompt_id": "ef474a0aaa4f42a2a8cf6622082d05db",
+                "timestamp": "2025-11-18T02:41:13.916252+00:00",
+                "age_seconds": 909.578252
+            },
+            "running": {
+                "prompt_id": "c2dc505e2f914ac5bddf3f0278d0b130",
+                "timestamp": "2025-11-18T02:42:23.020867+00:00",
+                "age_seconds": 840.473663
+            }
+        },
+        "durations": {
+            "window": 50,
+            "samples": 50,
+            "wait": {
+                "average": 182.37328526,
+                "max": 1058.545011,
+                "count": 50
+            },
+            "run": {
+                "average": 320.77673832000005,
+                "max": 1415.94936,
+                "count": 50
+            }
+        },
+        "human_tasks": {
+            "status_counts": {},
+            "blocking_count": 0,
+            "total": 0,
+            "revision": 5
+        },
+        "environments": {
+            "total": 2,
+            "status_counts": {
+                "healthy": 1,
+                "unknown": 1
+            },
+            "lifecycle_counts": {
+                "active": 1,
+                "planned": 1
+            },
+            "stale_checks": 1,
+            "revision": 0
+        }
+    },
+    "user": {
+        "email": "ulfurk@ulfurk.com",
+        "issued_at": 1763434561,
+        "expires_at": 1763477761
+    },
+    "identity": {
+        "status": "paired",
+        "agent": {
+            "id": "agent-devhost-eink",
+            "name": "Nightshift Dev Host",
+            "hardware": "raspberry-pi-5",
+            "workspace": "/home/ulfurk/devhost",
+            "branch": "instance/nightshift-devhost"
+        },
+        "control_plane": {
+            "api_base": "http://127.0.0.1:9090",
+            "paired_at": "2025-11-18T02:55:36.956645+00:00",
+            "last_synced_at": "2025-11-18T02:56:06.690237+00:00",
+            "device_id": "ns-devhost-eink"
+        },
+        "cloudflare": {
+            "hostname": "agent-devhost-eink.nghtshft.ai",
+            "tunnel_id": "cf-tunnel-devhost",
+            "account_id": "cfacct-nightshift"
+        },
+        "permissions": {
+            "repos": {
+                "allow": [
+                    "nightshift",
+                    "nebula-pulse"
+                ],
+                "deny": []
+            },
+            "workspaces": {
+                "allow": [
+                    "/home/ulfurk/devhost",
+                    "/workspaces/nightshift"
+                ],
+                "deny": []
+            }
+        },
+        "persona": {
+            "summary": "Paired Nightshift E-ink host",
+            "profile": "pi-eink"
+        },
+        "context": {
+            "queue": "nightshift-dev",
+            "notes": "staged bundle for pairing smoke",
+            "queue_header": "Nightshift Dev Host \u00b7 agent-devhost-eink.nghtshft.ai",
+            "status_chip": "paired"
+        }
+    }
+}

@@ -15,6 +15,9 @@ services:
       CODEX_SANDBOX: ${CODEX_SANDBOX:-}
       CODEX_ENABLE_SEARCH: ${CODEX_ENABLE_SEARCH:-1}
       NIGHTSHIFT_REPO_PATH: /workspaces/nightshift
+      REQUIRE_TUNNEL_HEALTH: ${REQUIRE_TUNNEL_HEALTH:-1}
+      ALLOW_LAN_MODE: ${ALLOW_LAN_MODE:-0}
+      TUNNEL_READY_URL: ${TUNNEL_READY_URL:-http://cloudflared:43100/ready}
       ENABLE_EINK_DISPLAY: ${ENABLE_EINK_DISPLAY:-0}
       EINK_GPIO_CHIP: ${EINK_GPIO_CHIP:-0}
       EINK_WIDTH: ${EINK_WIDTH:-1872}
@@ -70,3 +73,19 @@ services:
       - type: bind
         source: ${TRAEFIK_CERTS_HOST_PATH:-./data/router/certs}
         target: /etc/traefik/certs
+  cloudflared:
+    image: cloudflare/cloudflared:2024.8.1
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    command:
+      - tunnel
+      - --config
+      - /etc/cloudflared/config.yml
+      - --no-autoupdate
+      - run
+    volumes:
+      - type: bind
+        source: ${CLOUDFLARED_CONFIG_HOST_PATH:-./config/cloudflared}
+        target: /etc/cloudflared

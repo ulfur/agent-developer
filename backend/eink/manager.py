@@ -8,15 +8,33 @@ import queue
 import threading
 import time
 from dataclasses import asdict, is_dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Sequence, Tuple
+
+from PIL import Image, ImageDraw, ImageFont
 
 from .it8591 import DU_MODE, DisplayUnavailable, IT8591Config, IT8591DisplayDriver
 from .power import normalize_power_payload
-from .renderer import StatusRenderer
+from .renderer import BODY_FONT_CANDIDATES, StatusRenderer
 from log_utils import extract_stdout_preview
 
 SUBTITLE_REFRESH_INTERVAL = dt.timedelta(seconds=45)
 QUEUE_WAIT_TIMEOUT = 0.25  # seconds; lower latency for overlays/updates
+DEFAULT_BODY_SECTION = ("body",)
+BODY_SECTION_PREFIXES = ("human-task",)
+BODY_SECTION_REASONS = {
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    "canceled",
+    "retry",
+    "rollback",
+    "delete",
+    "edit",
+    "recovered prompts",
+}
+FULL_FRAME_REASONS = {"initial", "shutdown", "theme", "identity-registered"}
 
 
 class TaskQueueDisplayManager(threading.Thread):
@@ -33,7 +51,7 @@ class TaskQueueDisplayManager(threading.Thread):
         human_tasks: Any | None = None,
         power_monitor: Any | None = None,
         power_cache: Any | None = None,
-        power_poll_interval_sec: float = 10.0,
+        power_poll_interval_sec: float = 5.0,
         overlay_fast_mode: bool = False,
     ):
         super().__init__(daemon=True)
@@ -50,7 +68,7 @@ class TaskQueueDisplayManager(threading.Thread):
         self._overlay_lock = threading.Lock()
         self._overlay_timer: threading.Timer | None = None
         self._overlay_fast_mode = overlay_fast_mode
-        self._power_poll_interval = dt.timedelta(seconds=max(1.0, power_poll_interval_sec))
+        self._power_poll_interval = dt.timedelta(seconds=max(0.5, power_poll_interval_sec))
         self._next_power_poll: dt.datetime | None = None
         self._queue: "queue.Queue[tuple[str, tuple[str, ...] | None]]" = queue.Queue(maxsize=5)
         self._queue_wait_timeout = max(0.1, QUEUE_WAIT_TIMEOUT)
@@ -62,13 +80,18 @@ class TaskQueueDisplayManager(threading.Thread):
         self._next_subtitle_refresh: dt.datetime | None = None
         self._power_refresh_signature: Tuple[Any, Any, Any] | None = None
         self._refresh_in_progress = False
-        self._footer_refresh_interval = dt.timedelta(minutes=5)
-        self._next_footer_refresh: dt.datetime | None = dt.datetime.utcnow()
+        now = dt.datetime.utcnow()
+        self._footer_refresh_interval = dt.timedelta(seconds=30)
+        self._next_footer_refresh: dt.datetime | None = self._compute_next_footer_deadline(now)
+        self._footer_identity_refresh_interval = dt.timedelta(seconds=30)
+        self._next_footer_identity_refresh: dt.datetime | None = now
         self._last_power_percent: float | None = None
         self._last_power_state: str | None = None
         self._last_power_refresh: dt.datetime | None = None
         self._power_change_threshold = 2.0
-        self._power_refresh_cooldown = dt.timedelta(seconds=30)
+        self._power_refresh_cooldown = dt.timedelta(seconds=5)
+        self._latest_power_payload: Dict[str, Any] | None = None
+        self._power_status_override: Dict[str, Any] | None = None
 
     def request_refresh(self, reason: str = "", sections: tuple[str, ...] | None = None) -> None:
         """Queue a refresh request if the subsystem is enabled."""
@@ -76,12 +99,13 @@ class TaskQueueDisplayManager(threading.Thread):
             return
         if self._driver is None and not self._ensure_driver():
             return
+        normalized_sections = self._normalize_sections(reason, sections)
         try:
-            self._queue.put_nowait((reason or "update", sections))
+            self._queue.put_nowait((reason or "update", normalized_sections))
         except queue.Full:
             self._flush_refresh_queue()
             try:
-                self._queue.put_nowait((reason or "update", sections))
+                self._queue.put_nowait((reason or "update", normalized_sections))
             except queue.Full:
                 self.logger.debug("Display queue saturated; dropping refresh %s", reason)
 
@@ -106,12 +130,16 @@ class TaskQueueDisplayManager(threading.Thread):
             except queue.Empty:
                 self._maybe_poll_power()
                 self._maybe_refresh_footer_clock()
+                self._maybe_refresh_footer_identity()
+                self._maybe_rotate_subtitle()
                 continue
             if self._stop.is_set():
                 break
             self._refresh_panel(sections=sections)
             self._maybe_poll_power()
             self._maybe_refresh_footer_clock()
+            self._maybe_refresh_footer_identity()
+            self._maybe_rotate_subtitle()
 
     def stop(self) -> None:
         self._stop.set()
@@ -139,7 +167,7 @@ class TaskQueueDisplayManager(threading.Thread):
                 self._driver.height,
             )
             self._init_failed_at = None
-            self._schedule_next_subtitle_refresh()
+            self._schedule_next_subtitle_refresh(reset=True)
             return True
         except DisplayUnavailable as exc:
             self.logger.warning("E-ink display unavailable: %s", exc)
@@ -186,7 +214,18 @@ class TaskQueueDisplayManager(threading.Thread):
                 entries = self._build_display_entries(snapshot.get("items", []), human_records)
                 queue_depth = self.store.pending_count()
                 human_notifications = self._calculate_human_notifications(human_summary)
-                power_status = self._read_power_status_payload()
+                if self._power_status_override is not None:
+                    power_status = dict(self._power_status_override)
+                    self._power_status_override = None
+                else:
+                    power_status = None
+                    power_only = self._is_power_only_refresh(sections)
+                    if power_only and self._latest_power_payload:
+                        power_status = dict(self._latest_power_payload)
+                    else:
+                        power_status = self._read_power_status_payload()
+                    if not power_status and self._latest_power_payload:
+                        power_status = dict(self._latest_power_payload)
                 if sections:
                     image, section_images = self._renderer.render_with_sections(
                         entries,
@@ -194,6 +233,7 @@ class TaskQueueDisplayManager(threading.Thread):
                         pending_count=queue_depth,
                         human_notification_count=human_notifications,
                         power_status=power_status,
+                        section_filter=sections,
                     )
                     for name in sections:
                         region = section_images.get(name)
@@ -253,11 +293,42 @@ class TaskQueueDisplayManager(threading.Thread):
         except Exception as exc:  # pragma: no cover - hardware path
             self.logger.warning("Failed to push shutdown frame to e-ink display: %s", exc)
 
-    def _schedule_next_subtitle_refresh(self) -> None:
-        self._next_subtitle_refresh = None
+    def _schedule_next_subtitle_refresh(self, *, reset: bool = False) -> None:
+        if not self._renderer:
+            self._next_subtitle_refresh = None
+            return
+        if self._next_subtitle_refresh and not reset:
+            return
+        self._next_subtitle_refresh = dt.datetime.utcnow() + SUBTITLE_REFRESH_INTERVAL
 
     def _maybe_rotate_subtitle(self) -> None:
-        return
+        if not self._renderer:
+            return
+        if self._next_subtitle_refresh is None:
+            self._schedule_next_subtitle_refresh(reset=True)
+            return
+        now = dt.datetime.utcnow()
+        if now < self._next_subtitle_refresh:
+            return
+        try:
+            new_subtitle = self._renderer.rotate_subtitle()
+        except Exception as exc:  # pragma: no cover - defensive guard for font issues
+            self.logger.debug("Unable to rotate subtitle: %s", exc)
+            self._schedule_next_subtitle_refresh(reset=True)
+            return
+        self.logger.debug("Rotated header subtitle to '%s'", new_subtitle)
+        self._schedule_next_subtitle_refresh(reset=True)
+        self.request_refresh("subtitle", sections=("header_left",))
+
+    def handle_power_cache_update(self, payload: Dict[str, Any] | None) -> None:
+        if not payload or self._stop.is_set():
+            return
+        self._latest_power_payload = dict(payload)
+        self._power_status_override = dict(payload)
+        if self._refresh_in_progress:
+            self.request_refresh("power-cache", sections=("header_right",))
+            return
+        self._refresh_power_region_immediate()
 
     def _collect_human_tasks(self) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         summary: Dict[str, Any] = {"blocking_count": 0, "status_counts": {}}
@@ -298,7 +369,8 @@ class TaskQueueDisplayManager(threading.Thread):
         payload = normalize_power_payload(snapshot)
         if payload:
             self._publish_power_status(payload)
-        return payload or None
+            return payload
+        return None
 
     def _publish_power_status(self, payload: Dict[str, Any]) -> None:
         if not payload:
@@ -314,6 +386,7 @@ class TaskQueueDisplayManager(threading.Thread):
         except Exception as exc:  # pragma: no cover - optional publishing
             self.logger.debug("Failed to broadcast UPS telemetry snapshot: %s", exc)
             return
+        self._latest_power_payload = dict(payload)
         signature = (
             payload.get("ac_power"),
             payload.get("state"),
@@ -321,9 +394,12 @@ class TaskQueueDisplayManager(threading.Thread):
         )
         if signature != self._power_refresh_signature:
             self._power_refresh_signature = signature
-            if not self._refresh_in_progress:
-                self.logger.debug("Power state changed; scheduling aux display refresh")
+            self.logger.debug("Power state changed; refreshing header-right")
+            self._power_status_override = dict(payload)
+            if self._refresh_in_progress:
                 self.request_refresh("power-change", sections=("header_right",))
+            else:
+                self._refresh_power_region_immediate()
         self._maybe_refresh_power_section(payload)
 
     def _maybe_poll_power(self) -> None:
@@ -336,7 +412,7 @@ class TaskQueueDisplayManager(threading.Thread):
         self._read_power_status_payload()
 
     def _maybe_refresh_power_section(self, payload: Dict[str, Any]) -> None:
-        percent = payload.get("percent")
+        percent = payload.get("percentage")
         state = payload.get("state")
         try:
             percent_value = float(percent) if percent is not None else None
@@ -349,11 +425,16 @@ class TaskQueueDisplayManager(threading.Thread):
                 changed = True
         elif percent_value is not None and self._last_power_percent is None:
             changed = True
-        if state != self._last_power_state:
+        state_changed = state != self._last_power_state
+        if state_changed:
             changed = True
         if not changed:
             return
-        if self._last_power_refresh and (now - self._last_power_refresh) < self._power_refresh_cooldown:
+        if (
+            self._last_power_refresh
+            and (now - self._last_power_refresh) < self._power_refresh_cooldown
+            and not state_changed
+        ):
             self._last_power_percent = percent_value
             self._last_power_state = state
             return
@@ -366,8 +447,60 @@ class TaskQueueDisplayManager(threading.Thread):
         now = dt.datetime.utcnow()
         if self._next_footer_refresh and now < self._next_footer_refresh:
             return
-        self._next_footer_refresh = now + self._footer_refresh_interval
+        self._next_footer_refresh = self._compute_next_footer_deadline(now)
         self.request_refresh("footer-clock", sections=("footer_right",))
+
+    def _compute_next_footer_deadline(self, now: dt.datetime | None = None) -> dt.datetime:
+        current = now or dt.datetime.utcnow()
+        base = current.replace(second=0, microsecond=0)
+        base += dt.timedelta(minutes=1)
+        return base + dt.timedelta(seconds=1)
+
+    def _maybe_refresh_footer_identity(self) -> None:
+        if not self._renderer:
+            return
+        now = dt.datetime.utcnow()
+        if self._next_footer_identity_refresh and now < self._next_footer_identity_refresh:
+            return
+        self._next_footer_identity_refresh = now + self._footer_identity_refresh_interval
+        try:
+            changed = self._renderer.refresh_footer_identity()
+        except Exception as exc:  # pragma: no cover - defensive guard
+            self.logger.debug("Unable to refresh footer identity label: %s", exc)
+            return
+        if changed:
+            self.request_refresh("footer-identity", sections=("footer_left",))
+
+    def _normalize_sections(
+        self,
+        reason: str,
+        sections: tuple[str, ...] | None,
+    ) -> tuple[str, ...] | None:
+        if sections:
+            return tuple(sections)
+        reason_key = (reason or "").strip().lower()
+        if not reason_key:
+            return DEFAULT_BODY_SECTION
+        if reason_key in FULL_FRAME_REASONS:
+            return None
+        for prefix in BODY_SECTION_PREFIXES:
+            if reason_key.startswith(prefix):
+                return DEFAULT_BODY_SECTION
+        if reason_key in BODY_SECTION_REASONS:
+            return DEFAULT_BODY_SECTION
+        return None
+
+    def _is_power_only_refresh(self, sections: tuple[str, ...] | None) -> bool:
+        if not sections:
+            return False
+        return all(section == "header_right" for section in sections)
+
+    def _refresh_power_region_immediate(self) -> None:
+        try:
+            self._refresh_panel(sections=("header_right",))
+        except Exception:
+            self.logger.debug("Inline power refresh failed; scheduling via queue")
+            self.request_refresh("power-change", sections=("header_right",))
 
     def _build_display_entries(
         self,
@@ -570,10 +703,74 @@ class TaskQueueDisplayManager(threading.Thread):
                 if isinstance(expires_at, dt.datetime) and dt.datetime.utcnow() >= expires_at:
                     self._overlay = None
                     cleared = True
-        self._overlay_timer = None
+            self._overlay_timer = None
         if cleared:
             self.logger.debug("Overlay expired; refreshing display")
             self.request_refresh("overlay-expired", sections=("body",))
+
+    def run_section_selftest(self, dwell_seconds: float = 2.0) -> bool:
+        if not self.enabled:
+            return False
+        if not self._ensure_driver() or not self._renderer:
+            return False
+        snapshot = self.store.list_prompts()
+        human_records, human_summary = self._collect_human_tasks()
+        entries = self._build_display_entries(snapshot.get("items", []), human_records)
+        queue_depth = self.store.pending_count()
+        human_notifications = self._calculate_human_notifications(human_summary)
+        power_status = self._read_power_status_payload()
+        image, section_images = self._renderer.render_with_sections(
+            entries,
+            invert=self._should_invert_display(),
+            pending_count=queue_depth,
+            human_notification_count=human_notifications,
+            power_status=power_status,
+        )
+        sections = list(section_images.items())
+        if not sections:
+            return False
+        base_font_size = getattr(getattr(self._renderer, "_body_font", None), "size", 32)
+        font = self._renderer._load_font(
+            size=max(52, base_font_size),
+            candidates=BODY_FONT_CANDIDATES,
+        )
+        arrow_font = self._renderer._load_font(
+            size=max(40, base_font_size // 2),
+            candidates=BODY_FONT_CANDIDATES,
+        )
+        preview_dir = Path("/tmp/eink_section_previews")
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        for idx, (name, (region_image, bounds)) in enumerate(sections, start=1):
+            x, y, w, h = bounds
+            test_img = Image.new("L", (w, h), color=0xF0)
+            draw = ImageDraw.Draw(test_img)
+            draw.rectangle((0, 0, w - 1, h - 1), outline=0x00, width=10)
+            label = f"{idx}. {name}"
+            text_width = self._renderer._measure_text(label, font=font)
+            draw.text(((w - text_width) / 2, max(6, h // 8)), label, font=font, fill=0x00)
+            arrow = "→" if name.endswith("right") else "↓" if name == "body" else "←" if name.endswith("left") else "↑"
+            draw.text((w - 120, h - 80), arrow, font=arrow_font, fill=0x00)
+            preview_path = preview_dir / f"section_{idx}_{name}.png"
+            try:
+                test_img.save(preview_path)
+            except Exception:
+                self.logger.debug("Unable to save preview for %s", name)
+            self.logger.info(
+                "Self-test refreshing section %s at x=%s y=%s w=%s h=%s",
+                name,
+                x,
+                y,
+                w,
+                h,
+            )
+            try:
+                self._driver.display_region(test_img, bounds, mode=DU_MODE)
+            except Exception:
+                self.logger.exception("Section self-test failed on %s; falling back to full frame", name)
+                self._driver.display_image(image)
+                return False
+            time.sleep(max(0.5, dwell_seconds))
+        return True
 
     def _flush_refresh_queue(self) -> None:
         try:

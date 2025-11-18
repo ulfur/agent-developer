@@ -1,0 +1,18 @@
+[Unit]
+Description=Nightshift backend
+After=network-online.target cloudflared.service
+Wants=network-online.target
+ConditionPathExists=%h/devhost/backend/server.py
+
+[Service]
+Type=simple
+WorkingDirectory=%h/devhost
+EnvironmentFile=%h/.config/systemd/user/nightshift.env
+ExecStart=/usr/bin/env python3 backend/server.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:%h/devhost/logs/backend.stdout.log
+StandardError=append:%h/devhost/logs/backend.stderr.log
+
+[Install]
+WantedBy=default.target

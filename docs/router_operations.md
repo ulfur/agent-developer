@@ -56,3 +56,12 @@ If an environment is still `planned` (no DNS yet), keep the router metadata in p
 
 ## 5. Tracking manual work
 Use `scripts/human_tasks.py add ...` whenever certificate requests or DNS updates are pending. Each router-related Human Task should mention the environment id/slug, certificate thumbprint once issued, and any blockers (waiting on IT, pending CSR approval, etc.). Update or resolve the tasks as soon as the certs/DNS go live so the UI accurately reflects outstanding work.
+
+## 6. Cloudflare tunnel operations
+- Every Nightshift host now runs `cloudflared` (Docker ships a sidecar; bare-metal installs use `systemd/cloudflared.service`). The config + credentials live under `config/cloudflared/` and the readiness probe listens on port `43100`.
+- The backend polls `TUNNEL_READY_URL` (default `http://cloudflared:43100/ready` in Compose, `http://127.0.0.1:43100/ready` on native hosts) and refuses to serve `/api` or the UI until the readiness endpoint reports at least one `readyConnections`. The queue header chip and `/api/health` expose the same status object for dashboards.
+- To verify health:
+  1. `curl -sfS http://127.0.0.1:43100/ready` (or `http://cloudflared:43100/ready` inside Compose) – HTTP 200 plus `readyConnections > 0` confirms the tunnel is good.
+  2. Inspect `docker compose logs cloudflared` or `journalctl --user -u cloudflared.service -f` for credential or DNS errors.
+  3. Ensure `config/cloudflared/config.yml` references the issued hostname and correct upstream (`backend:8080` in Compose, `http://127.0.0.1:8080` on host installs) and that `<tunnel-id>.json`/`cert.pem` exist with restrictive permissions.
+- LAN-only overrides must stay rare and documented. Export `ALLOW_LAN_MODE=1` or touch `config/lan_mode_override` (override the path via `LAN_MODE_OVERRIDE_PATH`) only after logging the approval in `logs/progress.log`, and remove the override as soon as the heartbeat returns.

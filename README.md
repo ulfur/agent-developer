@@ -40,9 +40,28 @@ Use these CLI checks to exercise the headless pairing path before exposing a dev
 1. Start `python3 backend/server.py` and watch `logs/progress.log` for `Awaiting control-plane pairing` entries plus the one-time code. The login card also shows the same code until pairing completes.
 2. Confirm the pairing payload via `curl http://127.0.0.1:8080/api/agent/identity` (returns `{"status":"pairing","pairing_code":...}`) and ensure the queue header chip reflects the degraded state.
 3. Simulate the control plane claiming the device by posting a bundle to `POST http://127.0.0.1:8080/register-agent` (see `config/agent_identity.yml` for the canonical schema). On success the backend writes the file, logs the pairing event, and the UI flips to the resolved agent metadata.
-4. Verify the persisted identity with `curl http://127.0.0.1:8080/api/agent/identity` (status `paired`) and by inspecting `config/agent_identity.yml`. This also unblocks the prompt worker, so queued prompts will begin executing.
-5. Trigger a remote config refresh via `curl -X POST -H "Authorization: Bearer <session>" http://127.0.0.1:8080/api/agent/identity/sync` (or the **Refresh identity** UI button) to exercise the `GET /agent/:id/config` handshake. Failures are logged and surfaced in the queue header chip.
+4. Verify the persisted identity with `curl http://127.0.0.1:8080/api/agent/identity` (status `paired`), inspect `config/agent_identity.yml`, and confirm the queue header chip will show the new name/hostname by hitting `curl -H "Authorization: Bearer <session>" http://127.0.0.1:8080/api/health` (the frontend uses the `identity` block from that payload).
+5. Trigger a remote config refresh via `curl -X POST -H "Authorization: Bearer <session>" http://127.0.0.1:8080/api/agent/identity/sync` (or the **Refresh identity** UI button) so the new bundle exercises `GET /agent/:id/config`. Tail `logs/progress.log` for the `Control plane config refreshed` line plus `E-ink sections refreshed: footer_left/footer_right` to confirm the aux display footer picked up the paired status (run `./scripts/eink_section_selftest.py` if you need to force a footer refresh).
 6. Keep the `human-task-control-plane-credential-bundle` entry in `data/human_tasks.json` updated—operators working that blocker supply the Cloudflare tunnel certs, nghtshft.ai API tokens, and Monday sandbox secrets that the pairing flow expects. If those secrets drift, queue a follow-up Human Task (and verify it lands in both the JSON store and `logs/progress.log`).
+
+### Cloudflare tunnel health & LAN overrides
+- Docker installs now include a `cloudflared` sidecar (see `docker-compose.yml`) that mounts `config/cloudflared/` and publishes the readiness endpoint on `http://cloudflared:43100/ready`. The backend container sets `TUNNEL_READY_URL=http://cloudflared:43100/ready` so `/api` stays guarded until the tunnel shows at least one ready connection.
+- Bare-metal/systemd deployments should copy `systemd/cloudflared.service` and `systemd/nightshift.service` into `~/.config/systemd/user/`, install the `cloudflared` binary (the CDK user data now downloads it on EC2), and drop the issued bundle under `config/cloudflared/` (see `config/cloudflared/README.md`). The systemd unit uses `ConditionPathExists` so it waits for `config.yml` before starting.
+- `/api/health`, the queue header, and the workspace banner now surface the tunnel status. When the readiness probe fails, the UI shows a blocking overlay and every `/api/*` request (except `/api/login`, `/api/agent/identity`, and `/api/health`) responds with HTTP 503 until the heartbeat recovers.
+- LAN-only mode is for break-glass scenarios. Either export `ALLOW_LAN_MODE=1` or create `config/lan_mode_override` (override the path via `LAN_MODE_OVERRIDE_PATH`) once operations explicitly authorizes the bypass. The overlay reminds you which path to touch and the queue header chip shifts to “LAN mode” while the override is active.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `REQUIRE_TUNNEL_HEALTH` | `1` | Disable only when bring-up scripts need to run without Cloudflare. |
+| `TUNNEL_READY_URL` | `http://127.0.0.1:43100/ready` | Backend health probe. Compose overrides this to `http://cloudflared:43100/ready`. |
+| `ALLOW_LAN_MODE` | `0` | Skip the tunnel block entirely (use with care). |
+| `LAN_MODE_OVERRIDE_PATH` | `config/lan_mode_override` | Touch/remove this file to toggle LAN mode without editing env vars. |
+
+Troubleshooting checklist:
+1. `curl -sfS <ready-url>` – returns HTTP 200 with `readyConnections > 0` when the daemon is healthy.
+2. `docker compose logs cloudflared` or `journalctl --user -u cloudflared.service -f` – watch for credential/DNS errors.
+3. Verify `config/cloudflared/config.yml` points at the correct hostname and ingress target (`backend:8080` for Compose, `127.0.0.1:8080` on host installs) and that the issued `<tunnel-id>.json` exists with restrictive permissions.
+4. Record every override in `logs/progress.log` and remove `config/lan_mode_override` as soon as the tunnel heartbeat returns.
 
 ## Quick Start
 ### Bare-metal (Pi OS Lite or Linux)
@@ -71,6 +90,7 @@ Use these CLI checks to exercise the headless pairing path before exposing a dev
 
 ## Agent Platforms
 - **E-Ink Edition** – Raspberry Pi 5 with the IT8951 panel and UPS HAT. Ships with the auxiliary HUD enabled, so pairing codes and queue summaries appear on-screen even before the frontend starts.
+  - See `docs/eink_display.md` for section layouts, refresh cadences, and UPS telemetry notes.
 - **Touchscreen Edition** – Pi 5/CM5 with a touch UI overlay, local log viewer, and optional voice wake words for quick commands (pause agent, mark blocker resolved, etc.).
 - **Cloud Edition** – Containerized Nightshift that runs inside hosted infrastructure; uses the same nghtshft.ai identity flow but gets workspaces from persistent volumes or network shares.
 

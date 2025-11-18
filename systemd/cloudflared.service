@@ -1,0 +1,16 @@
+[Unit]
+Description=Cloudflare tunnel for Nightshift
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=%h/devhost/config/cloudflared/config.yml
+
+[Service]
+Type=simple
+Environment="CLOUDFLARED_CONFIG=%h/devhost/config/cloudflared/config.yml"
+EnvironmentFile=-%h/.config/systemd/user/cloudflared.env
+ExecStart=/usr/bin/env cloudflared tunnel --config ${CLOUDFLARED_CONFIG} --no-autoupdate run
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
