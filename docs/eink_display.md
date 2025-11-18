@@ -5,7 +5,9 @@
 - **Sections**: header-left (logo/title/subtitle), header-right (UPS status), body (human + agent queues), footer-left (IP / hostname), footer-right (UTC timestamp).
 - **Partial refreshes**: `display_region` is only called for the sections that changed. Queue/task events refresh the body, subtitle timer touches header-left, UPS deltas refresh header-right, and minute/IP timers cover the footers.
 - **Fonts/assets**: every header/body/footer line uses bold DejaVu/Liberation faces so DU updates stay legible. Subtitles rotate every 45 s and inherit the same copy deck as the web UI.
-- **Self-test**: run `scripts/eink_section_selftest.py` to paint labelled rectangles for each section (also stashes PNG previews in `/tmp/eink_section_previews`).
+- **Self-test**: run `scripts/eink_section_selftest.py` to paint labelled rectangles for each section. The first pass draws a full-frame overlay with numbered bounding boxes, and the follow-up per-section refreshes stash PNG previews (including `sections_overlay.png`) under `/tmp/eink_section_previews`.
+- **Footer responses**: `POST /api/eink/footer_message` with `{"text": "Yes boss?", "duration_sec": 3}` temporarily overrides the footer-right clock. The right column is split into override (left) + timestamp (right) slices so both stay legible, and the manager suppresses other partials until the timer expires (or you post an empty `text`).
+- **Section outlines**: set `EINK_DRAW_SECTION_BOUNDS=1` before launching the backend to draw debug boxes around each section and stash every footer override bitmap under `/tmp/eink_footer_debug/` for inspection.
 
 ### Power telemetry flow
 

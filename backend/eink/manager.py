@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import os
 import queue
 import threading
 import time
@@ -92,6 +93,16 @@ class TaskQueueDisplayManager(threading.Thread):
         self._power_refresh_cooldown = dt.timedelta(seconds=5)
         self._latest_power_payload: Dict[str, Any] | None = None
         self._power_status_override: Dict[str, Any] | None = None
+        self._footer_right_message: dict[str, Any] | None = None
+        self._footer_right_lock = threading.Lock()
+        self._footer_right_timer: threading.Timer | None = None
+        self._suppressed_refreshes: list[tuple[str, tuple[str, ...] | None]] = []
+        self._footer_debug_dir = Path(os.environ.get("EINK_FOOTER_DEBUG_DIR", "/tmp/eink_footer_debug"))
+        self._draw_section_bounds = os.environ.get("EINK_DRAW_SECTION_BOUNDS", "0").strip().lower() in {
+            "1",
+            "true",
+            "on",
+        }
 
     def request_refresh(self, reason: str = "", sections: tuple[str, ...] | None = None) -> None:
         """Queue a refresh request if the subsystem is enabled."""
@@ -100,6 +111,8 @@ class TaskQueueDisplayManager(threading.Thread):
         if self._driver is None and not self._ensure_driver():
             return
         normalized_sections = self._normalize_sections(reason, sections)
+        if self._should_suppress_refresh(reason, normalized_sections):
+            return
         try:
             self._queue.put_nowait((reason or "update", normalized_sections))
         except queue.Full:
@@ -143,6 +156,7 @@ class TaskQueueDisplayManager(threading.Thread):
 
     def stop(self) -> None:
         self._stop.set()
+        self._cancel_footer_message_timer()
         self._display_shutdown_frame()
         self.request_refresh("shutdown")
         if self._driver:
@@ -160,7 +174,11 @@ class TaskQueueDisplayManager(threading.Thread):
             return True
         try:
             self._driver = IT8591DisplayDriver(self.config, self.logger)
-            self._renderer = StatusRenderer(self._driver.width, self._driver.height)
+            self._renderer = StatusRenderer(
+                self._driver.width,
+                self._driver.height,
+                draw_section_bounds=self._draw_section_bounds,
+            )
             self.logger.info(
                 "Initialised IT8591 e-ink display (%sx%s px)",
                 self._driver.width,
@@ -187,6 +205,7 @@ class TaskQueueDisplayManager(threading.Thread):
             queue_depth = 0
             human_notifications = 0
             overlay_title = None
+            footer_override = self._active_footer_right_message()
             if overlay:
                 overlay_invert = overlay.get("invert")
                 overlay_lines = overlay.get("lines") or []
@@ -234,14 +253,22 @@ class TaskQueueDisplayManager(threading.Thread):
                         human_notification_count=human_notifications,
                         power_status=power_status,
                         section_filter=sections,
+                        footer_right_override=footer_override,
                     )
                     for name in sections:
                         region = section_images.get(name)
                         if not region:
                             continue
                         region_image, bounds = region
+                        section_start = time.perf_counter()
                         try:
                             self._driver.display_region(region_image, bounds, mode=DU_MODE)
+                            if name == "footer_right":
+                                elapsed_ms = int((time.perf_counter() - section_start) * 1000)
+                                self.logger.info(
+                                    "Footer right refresh duration_ms=%s mode=partial", elapsed_ms
+                                )
+                                self._debug_dump_footer_region(region_image, f"{elapsed_ms}ms")
                         except Exception:
                             self._driver.display_image(image)
                             break
@@ -252,8 +279,11 @@ class TaskQueueDisplayManager(threading.Thread):
                         pending_count=queue_depth,
                         human_notification_count=human_notifications,
                         power_status=power_status,
+                        footer_right_override=footer_override,
                     )
                     self._driver.display_image(image)
+                    if footer_override:
+                        self._debug_dump_footer_bitmap(image, tag="full")
             self._last_success = dt.datetime.utcnow()
             if overlay_title:
                 mode_label = "fast" if self._overlay_fast_mode else "full"
@@ -444,6 +474,8 @@ class TaskQueueDisplayManager(threading.Thread):
         self.request_refresh("power-change", sections=("header_right",))
 
     def _maybe_refresh_footer_clock(self) -> None:
+        if self._is_footer_message_active():
+            return
         now = dt.datetime.utcnow()
         if self._next_footer_refresh and now < self._next_footer_refresh:
             return
@@ -708,6 +740,158 @@ class TaskQueueDisplayManager(threading.Thread):
             self.logger.debug("Overlay expired; refreshing display")
             self.request_refresh("overlay-expired", sections=("body",))
 
+    # -------------------------------------------------------- footer message
+    def show_footer_right_message(self, text: str, duration_sec: float | None = None) -> bool:
+        message = (text or "").strip()
+        if not message:
+            self.clear_footer_right_message()
+            return False
+        duration = None
+        if duration_sec is not None:
+            try:
+                duration_value = float(duration_sec)
+            except (TypeError, ValueError):
+                duration_value = 0.0
+            duration = max(0.0, duration_value)
+        expires_at = None
+        if duration and duration > 0:
+            expires_at = dt.datetime.utcnow() + dt.timedelta(seconds=duration)
+        with self._footer_right_lock:
+            self._footer_right_message = {
+                "text": message,
+                "expires_at": expires_at,
+            }
+        self._schedule_footer_message_timer(duration)
+        if not self._refresh_footer_right_immediate():
+            self.request_refresh("footer-right-message", sections=("footer_right",))
+        return True
+
+    def clear_footer_right_message(self) -> None:
+        cleared = False
+        with self._footer_right_lock:
+            if self._footer_right_message is not None:
+                self._footer_right_message = None
+                cleared = True
+        self._cancel_footer_message_timer()
+        if cleared:
+            if not self._refresh_footer_right_immediate():
+                self.request_refresh("footer-right-message-cleared")
+            self._flush_suppressed_refreshes()
+
+    def _active_footer_right_message(self) -> str | None:
+        expire_cleared = False
+        with self._footer_right_lock:
+            message = self._footer_right_message
+            if not message:
+                return None
+            expires_at = message.get("expires_at")
+            if isinstance(expires_at, dt.datetime) and dt.datetime.utcnow() >= expires_at:
+                self._footer_right_message = None
+                expire_cleared = True
+                text = None
+            else:
+                text = str(message.get("text") or "").strip()
+        if expire_cleared:
+            self._cancel_footer_message_timer()
+            return None
+        return text or None
+
+    def _schedule_footer_message_timer(self, duration_sec: float | None) -> None:
+        self._cancel_footer_message_timer()
+        if not duration_sec or duration_sec <= 0:
+            return
+        timer = threading.Timer(duration_sec, self._handle_footer_message_timeout)
+        timer.daemon = True
+        timer.start()
+        self._footer_right_timer = timer
+
+    def _cancel_footer_message_timer(self) -> None:
+        timer = self._footer_right_timer
+        if timer is None:
+            return
+        timer.cancel()
+        self._footer_right_timer = None
+
+    def _handle_footer_message_timeout(self) -> None:
+        with self._footer_right_lock:
+            self._footer_right_message = None
+        self._footer_right_timer = None
+        if not self._refresh_footer_right_immediate():
+            self.request_refresh("footer-right-message-expired")
+        self._flush_suppressed_refreshes()
+
+    def _refresh_footer_right_immediate(self) -> bool:
+        if not self._driver or not self._renderer:
+            return False
+        if self._refresh_in_progress:
+            return False
+        try:
+            self._refresh_panel()
+            return True
+        except Exception:
+            self.logger.debug("Inline footer refresh failed; falling back to queue")
+            return False
+
+    def _debug_dump_footer_region(self, image: Image.Image, duration_tag: str) -> None:
+        if not self._footer_debug_dir:
+            return
+        try:
+            self._footer_debug_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return
+        timestamp = dt.datetime.utcnow().strftime("%Y%m%d-%H%M%S-%f")
+        path = self._footer_debug_dir / f"footer_region_{timestamp}_{duration_tag}.png"
+        try:
+            image.save(path)
+        except Exception:
+            pass
+
+    def _debug_dump_footer_bitmap(self, canvas: Image.Image, tag: str = "full") -> None:
+        if not self._renderer:
+            return
+        boxes = self._renderer.section_boxes()
+        box = boxes.get("footer_right") or boxes.get("footer_right_right")
+        if not box:
+            return
+        x, y, w, h = box
+        try:
+            region = canvas.crop((x, y, x + w, y + h))
+        except Exception:
+            return
+        self._debug_dump_footer_region(region, tag)
+
+    def _is_footer_message_active(self) -> bool:
+        with self._footer_right_lock:
+            return bool(self._footer_right_message)
+
+    def _should_suppress_refresh(
+        self,
+        reason: str,
+        sections: tuple[str, ...] | None,
+    ) -> bool:
+        if not self._is_footer_message_active():
+            return False
+        if sections is None:
+            target_sections: tuple[str, ...] = tuple()
+        else:
+            target_sections = sections
+        if target_sections and any(section == "footer_right" for section in target_sections):
+            return False
+        if reason.lower().startswith("overlay"):
+            return False
+        self.logger.debug("Suppressing refresh '%s' while footer message is active", reason)
+        self._suppressed_refreshes.append((reason or "update", target_sections if target_sections else None))
+        return True
+
+    def _flush_suppressed_refreshes(self) -> None:
+        if not self._suppressed_refreshes:
+            return
+        pending = list(self._suppressed_refreshes)
+        self._suppressed_refreshes.clear()
+        self.logger.debug("Replaying %s suppressed refreshes", len(pending))
+        for reason, sections in pending:
+            self.request_refresh(reason, sections)
+
     def run_section_selftest(self, dwell_seconds: float = 2.0) -> bool:
         if not self.enabled:
             return False
@@ -740,16 +924,44 @@ class TaskQueueDisplayManager(threading.Thread):
         )
         preview_dir = Path("/tmp/eink_section_previews")
         preview_dir.mkdir(parents=True, exist_ok=True)
-        for idx, (name, (region_image, bounds)) in enumerate(sections, start=1):
+
+        def _annotate(draw: ImageDraw.ImageDraw, origin_x: int, origin_y: int, width: int, height: int, idx: int, label: str) -> None:
+            draw.rectangle((origin_x, origin_y, origin_x + width - 1, origin_y + height - 1), outline=0x00, width=10)
+            text = f"{idx}. {label}"
+            text_width = self._renderer._measure_text(text, font=font)
+            text_x = int(origin_x + max(6, (width - text_width) / 2))
+            text_y = int(origin_y + max(6, height // 8))
+            draw.text((text_x, text_y), text, font=font, fill=0x00)
+            arrow = "→" if label.endswith("right") else "↓" if label == "body" else "←" if label.endswith("left") else "↑"
+            arrow_width = self._renderer._measure_text(arrow, font=arrow_font)
+            arrow_x = int(max(origin_x + 6, origin_x + width - arrow_width - 12))
+            arrow_y = int(max(origin_y + 6, origin_y + height - arrow_font.size - 12))
+            draw.text((arrow_x, arrow_y), arrow, font=arrow_font, fill=0x00)
+
+        annotated_image = image.copy()
+        annotated_draw = ImageDraw.Draw(annotated_image)
+        for idx, (name, (_, bounds)) in enumerate(sections, start=1):
+            x, y, w, h = bounds
+            _annotate(annotated_draw, x, y, w, h, idx, name)
+        overlay_preview = preview_dir / "sections_overlay.png"
+        try:
+            annotated_image.save(overlay_preview)
+        except Exception:
+            self.logger.debug("Unable to save overlay preview")
+        self.logger.info("Section self-test displaying %s annotated sections", len(sections))
+        try:
+            self._driver.display_image(annotated_image)
+        except Exception:
+            self.logger.exception("Failed to display annotated section overlay; falling back to full frame")
+            self._driver.display_image(image)
+            return False
+        time.sleep(max(0.5, dwell_seconds))
+
+        for idx, (name, (_region_image, bounds)) in enumerate(sections, start=1):
             x, y, w, h = bounds
             test_img = Image.new("L", (w, h), color=0xF0)
             draw = ImageDraw.Draw(test_img)
-            draw.rectangle((0, 0, w - 1, h - 1), outline=0x00, width=10)
-            label = f"{idx}. {name}"
-            text_width = self._renderer._measure_text(label, font=font)
-            draw.text(((w - text_width) / 2, max(6, h // 8)), label, font=font, fill=0x00)
-            arrow = "→" if name.endswith("right") else "↓" if name == "body" else "←" if name.endswith("left") else "↑"
-            draw.text((w - 120, h - 80), arrow, font=arrow_font, fill=0x00)
+            _annotate(draw, 0, 0, w, h, idx, name)
             preview_path = preview_dir / f"section_{idx}_{name}.png"
             try:
                 test_img.save(preview_path)

@@ -74,7 +74,7 @@ HEADER_ICON_BASE_SCALE = 1.05  # preserves the legacy scaling before enlargement
 class StatusRenderer:
     """Create monochrome bitmaps summarising queue status."""
 
-    def __init__(self, width: int, height: int):
+    def __init__(self, width: int, height: int, *, draw_section_bounds: bool = False):
         self.width = width
         self.height = height
         self._title_font = self._load_font(size=84, candidates=TITLE_FONT_CANDIDATES)
@@ -100,6 +100,9 @@ class StatusRenderer:
         self._footer_font = self._load_font(size=44, candidates=BODY_FONT_CANDIDATES)
         self._footer_margin = max(18, self._margin // 3)
         self._footer_left_label = self._build_footer_left_label()
+        self._draw_section_bounds = draw_section_bounds
+        self._footer_top_trim = 10
+        self._last_boxes: dict[str, tuple[int, int, int, int]] = {}
 
     def render(
         self,
@@ -109,8 +112,11 @@ class StatusRenderer:
         pending_count: int | None = None,
         human_notification_count: int | None = None,
         power_status: Mapping[str, Any] | None = None,
+        footer_right_override: str | None = None,
     ) -> Image.Image:
         """Return a greyscale PIL image containing queue metadata."""
+        boxes = self._compute_section_boxes()
+        self._last_boxes = boxes
         canvas = Image.new("L", (self.width, self.height), color=0xFF)
         draw = ImageDraw.Draw(canvas)
         y = self._top_margin
@@ -126,6 +132,7 @@ class StatusRenderer:
             pending_count=pending_count,
             human_notification_count=human_notification_count,
             power_status=power_status,
+            boxes=boxes,
         )
 
         human_count = 0
@@ -159,17 +166,34 @@ class StatusRenderer:
             if y > content_bottom:
                 break
 
-        footer_left, footer_right = self._build_footer_labels()
-        footer_y = self.height - self._footer_margin - self._footer_font.size
-        if footer_left:
-            draw.text((self._margin, footer_y), footer_left, font=self._footer_font, fill=0x00)
-        if footer_right:
-            right_width = self._measure_text(footer_right, font=self._footer_font)
-            right_x = max(self._margin, self.width - self._margin - right_width)
-            draw.text((right_x, footer_y), footer_right, font=self._footer_font, fill=0x00)
+        footer_left, footer_override, footer_clock = self._build_footer_labels(footer_right_override)
+
+        def _draw_footer_box(box: tuple[int, int, int, int], text: str, align: str = "left") -> None:
+            if not text:
+                return
+            x, y, w, h = box
+            text_width = self._measure_text(text, font=self._footer_font)
+            if align == "right":
+                text_x = x + max(0, w - text_width - 6)
+            elif align == "center":
+                text_x = x + max(0, (w - text_width) // 2)
+            else:
+                text_x = x
+            text_y = y + max(0, (h - self._footer_font.size) // 2)
+            draw.text((text_x, text_y), text, font=self._footer_font, fill=0x00)
+
+        if footer_override:
+            _draw_footer_box(boxes["footer_left"], footer_override, align="center")
+        else:
+            _draw_footer_box(boxes["footer_left"], footer_left, align="left")
+        _draw_footer_box(boxes["footer_right_right"], footer_clock, align="right")
 
         if invert:
             canvas = ImageOps.invert(canvas)
+            draw = ImageDraw.Draw(canvas)
+
+        if self._draw_section_bounds:
+            self._draw_section_outlines(draw, boxes)
 
         return canvas
 
@@ -182,6 +206,7 @@ class StatusRenderer:
         human_notification_count: int | None = None,
         power_status: Mapping[str, Any] | None = None,
         section_filter: Sequence[str] | None = None,
+        footer_right_override: str | None = None,
     ) -> tuple[Image.Image, dict[str, tuple[Image.Image, tuple[int, int, int, int]]]]:
         canvas = self.render(
             entries,
@@ -189,9 +214,13 @@ class StatusRenderer:
             pending_count=pending_count,
             human_notification_count=human_notification_count,
             power_status=power_status,
+            footer_right_override=footer_right_override,
         )
         sections = self._extract_section_images(canvas, section_filter)
         return canvas, sections
+
+    def section_boxes(self) -> dict[str, tuple[int, int, int, int]]:
+        return getattr(self, "_last_boxes", self._compute_section_boxes())
 
     def rotate_subtitle(self) -> str:
         """Advance the header subtitle and return the new text."""
@@ -308,7 +337,7 @@ class StatusRenderer:
     def _compute_section_boxes(self) -> dict[str, tuple[int, int, int, int]]:
         boxes: dict[str, tuple[int, int, int, int]] = {}
         content_width = self.width - (2 * self._margin)
-        header_height = self._align_span(self._title_font.size + max(self._subtitle_font.size, 32) + 16)
+        header_height = self._align_span(self._title_font.size + max(self._subtitle_font.size, 32) + 16) + 10
         footer_height = self._align_span(self._footer_font.size + 18)
         header_left_width = self._align_span(int(content_width * 0.55))
         header_right_width = self._align_span(content_width - header_left_width)
@@ -320,9 +349,12 @@ class StatusRenderer:
             header_right_width,
             header_height,
         )
-        body_top = max(self._top_margin, header_top + header_height - 12)
+        body_top = max(self._top_margin, header_top + header_height - 12) + 15
         footer_top = self.height - footer_height - self._footer_margin
-        body_height = max(4, footer_top - body_top - 6)
+        if self._footer_top_trim > 0:
+            footer_top += self._footer_top_trim
+            footer_height = max(4, footer_height - self._footer_top_trim)
+        body_height = max(4, footer_top - body_top + 4)
         body_box = self._align_box(self._margin, body_top, content_width, body_height)
         footer_left_box = self._align_box(self._margin, footer_top, header_left_width, footer_height)
         footer_right_box = self._align_box(
@@ -331,11 +363,43 @@ class StatusRenderer:
             header_right_width,
             footer_height,
         )
+        footer_split_gap = self._align_span(8)
+        footer_left_width = self._align_span(int(footer_right_box[2] * 0.35))
+        footer_left_width = min(footer_left_width, footer_right_box[2] - footer_split_gap - 4)
+        footer_left_width = max(4, footer_left_width)
+        footer_right_width = max(4, footer_right_box[2] - footer_left_width - footer_split_gap)
+        footer_right_left_box = self._align_box(
+            footer_right_box[0], footer_right_box[1], footer_left_width, footer_right_box[3]
+        )
+        footer_right_right_box = self._align_box(
+            footer_right_box[0] + footer_left_width + footer_split_gap,
+            footer_right_box[1],
+            footer_right_width,
+            footer_right_box[3],
+        )
+        header_split_gap = self._align_span(4)
+        header_left_width_inner = self._align_span(int(header_right_box[2] * (2 / 3)))
+        header_left_width_inner = min(header_left_width_inner, header_right_box[2] - header_split_gap - 4)
+        header_left_width_inner = max(4, header_left_width_inner)
+        header_right_width_inner = max(4, header_right_box[2] - header_left_width_inner)
+        header_right_left_box = self._align_box(
+            header_right_box[0], header_right_box[1], header_left_width_inner, header_right_box[3]
+        )
+        header_right_right_box = self._align_box(
+            header_right_left_box[0] + header_left_width_inner,
+            header_right_box[1],
+            header_right_width_inner,
+            header_right_box[3],
+        )
         boxes["header_left"] = header_left_box
         boxes["header_right"] = header_right_box
+        boxes["header_right_left"] = header_right_left_box
+        boxes["header_right_right"] = header_right_right_box
         boxes["body"] = body_box
         boxes["footer_left"] = footer_left_box
         boxes["footer_right"] = footer_right_box
+        boxes["footer_right_left"] = footer_right_left_box
+        boxes["footer_right_right"] = footer_right_right_box
         return boxes
 
     def _align_span(self, value: int) -> int:
@@ -360,6 +424,19 @@ class StatusRenderer:
         if h % 4:
             h -= h % 4
         return x, y, w, h
+
+    def _draw_section_outlines(self, draw: ImageDraw.ImageDraw, boxes: dict[str, tuple[int, int, int, int]]) -> None:
+        for name, (x, y, w, h) in boxes.items():
+            if w <= 0 or h <= 0:
+                continue
+            inset = 1
+            if w <= inset * 2 or h <= inset * 2:
+                continue
+            draw.rectangle(
+                (x + inset, y + inset, x + w - inset - 1, y + h - inset - 1),
+                outline=0xFF,
+                width=2,
+            )
 
     # ----------------------------------------------------------------- helpers
     def _format_entry(self, idx: int, record: Mapping[str, Any], status: str) -> list[str]:
@@ -499,6 +576,7 @@ class StatusRenderer:
         pending_count: int | None,
         human_notification_count: int | None,
         power_status: Mapping[str, Any] | None = None,
+        boxes: dict[str, tuple[int, int, int, int]],
     ) -> int:
         title = "Nightshift"
         subtitle = (self._subtitle_text or "").strip()
@@ -542,19 +620,22 @@ class StatusRenderer:
             stats_block_height = max(glyph_height, text_block_height)
         logo_height = logo.height if logo else 0
         header_height = max(title_block_height, logo_height, stats_block_height)
-        text_x = self._margin + (logo.width + self._logo_text_gap if logo else 0)
-        text_y = y + max(0, (header_height - title_block_height) // 2)
+        header_left_box = boxes["header_left"]
+        header_right_right_box = boxes.get("header_right_right", boxes["header_right"])
+        text_x = header_left_box[0] + (logo.width + self._logo_text_gap if logo else 0)
+        text_y = header_left_box[1] + max(0, (header_left_box[3] - title_block_height) // 2)
         draw.text((text_x, text_y), title, font=self._title_font, fill=0x00)
         if subtitle_block and subtitle_font:
             aligned_subtitle_x = text_x
             subtitle_y = text_y + self._title_font.size + self._subtitle_gap
             draw.text((aligned_subtitle_x, subtitle_y), subtitle, font=subtitle_font, fill=0x00)
         if logo:
-            logo_y = y + max(0, (header_height - logo.height) // 2)
-            canvas.paste(logo, (self._margin, logo_y))
+            logo_y = header_left_box[1] + max(0, (header_left_box[3] - logo.height) // 2)
+            canvas.paste(logo, (header_left_box[0], logo_y))
         if power_block:
-            stats_x = max(self._margin, self.width - self._margin - stats_width)
-            stats_y = y + max(0, (header_height - stats_block_height) // 2)
+            stats_box = header_right_right_box
+            stats_x = stats_box[0] + max(0, stats_box[2] - stats_width)
+            stats_y = stats_box[1] + max(0, (stats_box[3] - stats_block_height) // 2)
             glyph_font = glyph_font or stats_font
             text_x = stats_x
             if text_lines:
@@ -577,11 +658,11 @@ class StatusRenderer:
                 draw.text((text_x, current_y), line, font=stats_font, fill=0x00)
                 text_width = max(text_width, self._measure_text(line, font=stats_font))
                 current_y += stats_font.size + stats_line_gap
-            icon_x = text_x + (text_width if text_lines else 0) + (glyph_gap if glyph_text else 0)
+            icon_x = min(stats_box[0] + stats_box[2] - glyph_width, text_x + (text_width if text_lines else 0) + (glyph_gap if glyph_text else 0))
             if glyph_text:
                 icon_y = stats_y + max(0, (stats_block_height - glyph_font.size) // 2)
                 draw.text((icon_x, icon_y), glyph_text, font=glyph_font, fill=0x00)
-        return y + header_height + 30
+        return header_left_box[1] + header_left_box[3] + 30
 
     def _build_power_display(self, power_status: Mapping[str, Any] | None) -> dict[str, Any]:
         if not power_status:
@@ -772,9 +853,11 @@ class StatusRenderer:
                 continue
         return mapping
 
-    def _build_footer_labels(self) -> tuple[str, str]:
+    def _build_footer_labels(self, right_override: str | None) -> tuple[str, str, str]:
         timestamp = self._current_local_time().strftime("%Y-%m-%d %H:%M")
-        return self._footer_left_label, timestamp
+        footer_right_right = timestamp
+        footer_right_left = (right_override or "").strip()
+        return self._footer_left_label, footer_right_left, footer_right_right
 
     def _build_footer_left_label(self) -> str:
         ip_address = self._get_primary_ip() or "0.0.0.0"

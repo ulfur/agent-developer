@@ -177,6 +177,16 @@ Key environment variables:
 
 The renderer splits the canvas into human-task and prompt columns, shows queue counts, the rotating subtitle, and the most recent entries with timestamps. Refreshes happen after every queue mutation or on demand via the backend admin actions.
 
+### Wake-on-voice footer prompts
+- The backend now exposes `POST /api/eink/footer_message` so you can temporarily replace the footer-right clock. Send `{"text": "Yes boss?", "duration_sec": 3}` to overwrite the clock for three seconds and it automatically reverts to the normal timestamp once the timer expires. Omitting `duration_sec` keeps the custom text until you either post `{"text": ""}` or restart the display manager.
+- `scripts/nightshift_listener.py` ties that endpoint to a local wake-word detector powered by Vosk. By default it listens for “nightshift” and flashes `Yes boss?` for three seconds without disturbing the rest of the layout:
+  ```bash
+  ./scripts/nightshift_listener.py --keyword nightshift --wake-response "Yes boss?"
+  ```
+  Set `--wake-response` to customize the footer text or `--disable-overlay` if the backend is offline.
+- Need to measure e-ink timing? Run `./scripts/test_footer_refresh.py --iterations 10` – it posts the footer override repeatedly and reports the `Footer right refresh duration_ms=…` entries from `logs/progress.log`, so you can see how long the panel took to render each partial update.
+- The footer (and header) now split their right-hand columns into left/right slices, so wake prompts live in the left slice while the clock and UPS stats stay visible on the right. Set `EINK_DRAW_SECTION_BOUNDS=1` before launching the backend if you want visual outlines around every section while tuning the layout.
+
 ## Headless Wi-Fi Bootstrap
 For emergency Pi deployments without Ethernet:
 ```bash
